@@ -1,0 +1,66 @@
+{
+    "name": "vorgio-app/vorgio-php",
+    "description": "Official PHP SDK for the Vorgio API. Issue invoices, send them to clients, and verify webhooks.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": ["vorgio", "invoicing", "api", "sdk", "webhooks", "payment-provider"],
+    "homepage": "https://app.vorgio.example",
+    "support": {
+        "docs": "https://app.vorgio.example/docs",
+        "issues": "https://github.com/vorgio-app/vorgio-php/issues",
+        "source": "https://github.com/vorgio-app/vorgio-php"
+    },
+    "authors": [
+        {
+            "name": "Vorgio",
+            "homepage": "https://app.vorgio.example"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "guzzlehttp/guzzle": "^7.5",
+        "ext-json": "*",
+        "ext-hash": "*"
+    },
+    "require-dev": {
+        "pestphp/pest": "^2.34 || ^3.0",
+        "phpunit/phpunit": "^10.5 || ^11.0",
+        "friendsofphp/php-cs-fixer": "^3.50",
+        "phpstan/phpstan": "^1.10 || ^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Vorgio\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Vorgio\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Vorgio\\Laravel\\VorgioServiceProvider"
+            ],
+            "aliases": {
+                "Vorgio": "Vorgio\\Laravel\\Facades\\Vorgio"
+            }
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/pest",
+        "test:coverage": "vendor/bin/pest --coverage",
+        "lint": "vendor/bin/php-cs-fixer fix --dry-run --diff",
+        "format": "vendor/bin/php-cs-fixer fix",
+        "stan": "vendor/bin/phpstan analyse"
+    },
+    "config": {
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
