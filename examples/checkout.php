@@ -57,10 +57,9 @@ try {
                 ],
             ],
         ],
-        'send' => [
-            'subject' => 'Your invoice from Demo Shop',
-            'body' => "Hello,\n\nplease find your invoice attached.\n\nThanks!",
-        ],
+        // `send` is optional — when omitted, Vorgio uses its localized default
+        // subject + body, picking the language from `client.language`. Pass
+        // your own `subject` / `body` if you want to override.
         'metadata' => [
             'origin' => 'vorgio-php example',
         ],
