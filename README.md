@@ -1,6 +1,6 @@
 # vorgio-php
 
-Official PHP SDK for the [Vorgio](https://app.vorgio.example) invoicing API.
+Official PHP SDK for the [Vorgio](https://vorgio.app) invoicing API.
 
 Thin, framework-agnostic wrapper. Optional Laravel auto-discovery (service
 provider + facade + publishable config) loads automatically when Laravel is
@@ -24,7 +24,7 @@ use Vorgio\VorgioClient;
 
 $vorgio = new VorgioClient(
     token: 'act_…',                       // from Vorgio → Team → API tokens
-    baseUrl: 'https://app.vorgio.example',
+    baseUrl: 'https://vorgio.app',
 );
 
 $result = $vorgio->checkouts()->create([
@@ -78,6 +78,7 @@ See [`examples/checkout.php`](examples/checkout.php) for a runnable script.
 | `DELETE /v1/invoices/{id}`             | `$vorgio->invoices()->delete($id)`          |
 | `POST /v1/invoices/{id}/send`          | `$vorgio->invoices()->send($id, $body)`     |
 | `POST /v1/invoices/{id}/mark-paid`     | `$vorgio->invoices()->markPaid($id, $body)` |
+| `GET  /v1/invoices/{id}/pdf`           | `$vorgio->invoices()->pdf($id)`             |
 | `GET  /v1/clients`                     | `$vorgio->clients()->list($query)`          |
 | `POST /v1/clients`                     | `$vorgio->clients()->create($body)`         |
 | `GET  /v1/clients/{id}`                | `$vorgio->clients()->retrieve($id)`         |
@@ -86,7 +87,7 @@ See [`examples/checkout.php`](examples/checkout.php) for a runnable script.
 
 Every method returns the decoded JSON response as a PHP `array`. The full
 contract for each request/response shape lives at
-[app.vorgio.example/api-reference](https://app.vorgio.example/api-reference).
+[vorgio.app/api-reference](https://vorgio.app/api-reference).
 
 ## Idempotency
 
@@ -102,6 +103,28 @@ $vorgio->checkouts()->create($body, idempotencyKey: 'wc_order_'.$order->id);
 If you ship the same idempotency key twice within the server's retention
 window, you get back the original response with an
 `Idempotency-Replay: true` header.
+
+## Downloading PDFs
+
+```php
+$pdf = $vorgio->invoices()->pdf($invoiceId);
+
+file_put_contents("/tmp/{$invoiceId}.pdf", $pdf->bytes);
+$cachedEtag = $pdf->etag;   // stash this alongside your record
+
+// Later — pass the stored ETag to short-circuit a re-render:
+$pdf = $vorgio->invoices()->pdf($invoiceId, ifNoneMatch: $cachedEtag);
+
+if ($pdf->notModified) {
+    // 304 — your cached copy is still current.
+} else {
+    // PDF changed — overwrite local copy and update $cachedEtag = $pdf->etag.
+}
+```
+
+The returned `Vorgio\InvoicePdf` is a tiny value object with `bytes`,
+`etag`, and `notModified`. The ETag value is opaque — store and replay it
+verbatim, including the surrounding quotes.
 
 ## Errors
 
@@ -163,7 +186,7 @@ php artisan vendor:publish --tag=vorgio-config
 
 ```dotenv
 VORGIO_TOKEN=act_…
-VORGIO_BASE_URL=https://app.vorgio.example
+VORGIO_BASE_URL=https://vorgio.app
 VORGIO_WEBHOOK_SECRET=whsec_…
 ```
 

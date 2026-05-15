@@ -18,11 +18,11 @@ use Vorgio\VorgioClient;
  * destructuring without losing the live binding the middleware writes through.
  *
  * @param  array<int, Response|\GuzzleHttp\Exception\GuzzleException>  $responses
- * @return array{0: VorgioClient, 1: ArrayObject<int, array<string, mixed>>}
+ * @return array{0: VorgioClient, 1: ArrayObject<int, array>}
  */
 function vorgioMockClient(array $responses, string $token = 'act_test'): array
 {
-    /** @var ArrayObject<int, array<string, mixed>> $history */
+    /** @var ArrayObject<int, array> $history */
     $history = new ArrayObject();
 
     $mock = new MockHandler($responses);

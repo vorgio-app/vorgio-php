@@ -25,7 +25,7 @@ use Vorgio\Util\Uuid;
  * <code>
  * $vorgio = new VorgioClient(
  *     token: 'act_…',
- *     baseUrl: 'https://app.vorgio.example',
+ *     baseUrl: 'https://vorgio.app',
  * );
  *
  * $checkout = $vorgio->checkouts()->create([...]);
@@ -49,7 +49,7 @@ class VorgioClient
 
     public function __construct(
         public readonly string $token,
-        public readonly string $baseUrl = 'https://app.vorgio.example',
+        public readonly string $baseUrl = 'https://vorgio.app',
         ?ClientInterface $httpClient = null,
         public readonly float $timeout = self::DEFAULT_TIMEOUT,
         public readonly string $apiVersion = 'v1',
@@ -81,7 +81,7 @@ class VorgioClient
     }
 
     /**
-     * Perform an authenticated request and return the decoded body.
+     * Perform an authenticated request and return the decoded JSON body.
      *
      * @param  array<string, mixed>|null  $body  JSON body for POST/PATCH/PUT
      * @param  array<string, mixed>  $query  Query string parameters
@@ -95,6 +95,71 @@ class VorgioClient
         array $query = [],
         array $headers = [],
     ): array {
+        $response = $this->sendRequest($method, $path, $body, $query, $headers);
+        $status = $response->getStatusCode();
+
+        if ($status >= 400) {
+            $this->throwForResponse($response);
+        }
+
+        $rawBody = (string) $response->getBody();
+        if ($rawBody === '') {
+            return [];
+        }
+
+        $decoded = json_decode($rawBody, true);
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    /**
+     * Perform an authenticated request and return the raw response, without
+     * JSON decoding. Useful for binary endpoints like
+     * `GET /v1/invoices/{id}/pdf`.
+     *
+     * @param  array<string, mixed>  $query  Query string parameters
+     * @param  array<string, string>  $headers  Extra request headers
+     * @return array{status: int, headers: array<string, string>, body: string}
+     */
+    public function requestRaw(
+        string $method,
+        string $path,
+        array $query = [],
+        array $headers = [],
+    ): array {
+        $response = $this->sendRequest($method, $path, null, $query, $headers);
+        $status = $response->getStatusCode();
+
+        // 304 Not Modified is a legitimate non-error response for ETag-aware
+        // endpoints, so don't lump it in with 4xx/5xx.
+        if ($status >= 400) {
+            $this->throwForResponse($response);
+        }
+
+        $headerMap = [];
+        foreach ($response->getHeaders() as $name => $values) {
+            $headerMap[strtolower($name)] = $values[0] ?? '';
+        }
+
+        return [
+            'status' => $status,
+            'headers' => $headerMap,
+            'body' => (string) $response->getBody(),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $body
+     * @param  array<string, mixed>  $query
+     * @param  array<string, string>  $headers
+     */
+    private function sendRequest(
+        string $method,
+        string $path,
+        ?array $body,
+        array $query,
+        array $headers,
+    ): ResponseInterface {
         $method = strtoupper($method);
 
         $headers = array_change_key_case($headers, CASE_LOWER);
@@ -133,7 +198,7 @@ class VorgioClient
         $url = $this->buildUrl($path);
 
         try {
-            $response = $this->http->request($method, $url, $options);
+            return $this->http->request($method, $url, $options);
         } catch (ConnectException $e) {
             throw new VorgioException(
                 'Could not reach Vorgio at '.$url.': '.$e->getMessage(),
@@ -145,17 +210,14 @@ class VorgioClient
             if ($response === null) {
                 throw new VorgioException('Vorgio request failed: '.$e->getMessage(), 0, $e);
             }
+
+            return $response;
         } catch (GuzzleException $e) {
             throw new VorgioException('Vorgio request failed: '.$e->getMessage(), 0, $e);
         }
-
-        return $this->parseResponse($response);
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    private function parseResponse(ResponseInterface $response): array
+    private function throwForResponse(ResponseInterface $response): never
     {
         $status = $response->getStatusCode();
         $rawBody = (string) $response->getBody();
@@ -163,14 +225,10 @@ class VorgioClient
 
         $decoded = [];
         if ($rawBody !== '') {
-            $decoded = json_decode($rawBody, true);
-            if (! is_array($decoded)) {
-                $decoded = [];
+            $candidate = json_decode($rawBody, true);
+            if (is_array($candidate)) {
+                $decoded = $candidate;
             }
-        }
-
-        if ($status >= 200 && $status < 300) {
-            return $decoded;
         }
 
         $title = isset($decoded['title']) && is_string($decoded['title'])

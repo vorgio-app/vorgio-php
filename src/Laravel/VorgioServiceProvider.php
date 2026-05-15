@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Vorgio\Laravel;
 
+use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
 use Vorgio\Exception\VorgioException;
@@ -23,7 +24,8 @@ class VorgioServiceProvider extends ServiceProvider
         $this->mergeConfigFrom(__DIR__.'/config/vorgio.php', 'vorgio');
 
         $this->app->singleton(VorgioClient::class, function (Application $app): VorgioClient {
-            $token = (string) config('vorgio.token', '');
+            $config = $app->make(ConfigRepository::class);
+            $token = (string) $config->get('vorgio.token', '');
 
             if ($token === '') {
                 throw new VorgioException(
@@ -33,8 +35,8 @@ class VorgioServiceProvider extends ServiceProvider
 
             return new VorgioClient(
                 token: $token,
-                baseUrl: (string) config('vorgio.base_url', 'https://app.vorgio.example'),
-                timeout: (float) config('vorgio.timeout', VorgioClient::DEFAULT_TIMEOUT),
+                baseUrl: (string) $config->get('vorgio.base_url', 'https://vorgio.app'),
+                timeout: (float) $config->get('vorgio.timeout', VorgioClient::DEFAULT_TIMEOUT),
             );
         });
 

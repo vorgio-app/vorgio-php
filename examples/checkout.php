@@ -19,7 +19,7 @@ use Vorgio\Exception\VorgioApiException;
 use Vorgio\VorgioClient;
 
 $token = getenv('VORGIO_TOKEN') ?: '';
-$baseUrl = getenv('VORGIO_BASE_URL') ?: 'https://app.vorgio.example';
+$baseUrl = getenv('VORGIO_BASE_URL') ?: 'https://vorgio.app';
 
 if ($token === '') {
     fwrite(STDERR, "Set VORGIO_TOKEN before running this script.\n");

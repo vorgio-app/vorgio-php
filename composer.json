@@ -4,16 +4,16 @@
     "type": "library",
     "license": "MIT",
     "keywords": ["vorgio", "invoicing", "api", "sdk", "webhooks", "payment-provider"],
-    "homepage": "https://app.vorgio.example",
+    "homepage": "https://vorgio.app",
     "support": {
-        "docs": "https://app.vorgio.example/docs",
+        "docs": "https://vorgio.app/docs",
         "issues": "https://github.com/vorgio-app/vorgio-php/issues",
         "source": "https://github.com/vorgio-app/vorgio-php"
     },
     "authors": [
         {
             "name": "Vorgio",
-            "homepage": "https://app.vorgio.example"
+            "homepage": "https://vorgio.app"
         }
     ],
     "require": {
@@ -23,10 +23,11 @@
         "ext-hash": "*"
     },
     "require-dev": {
-        "pestphp/pest": "^2.34 || ^3.0",
-        "phpunit/phpunit": "^10.5 || ^11.0",
         "friendsofphp/php-cs-fixer": "^3.50",
-        "phpstan/phpstan": "^1.10 || ^2.0"
+        "illuminate/support": "^10.0 || ^11.0 || ^12.0 || ^13.0",
+        "pestphp/pest": "^2.34 || ^3.0",
+        "phpstan/phpstan": "^1.10 || ^2.0",
+        "phpunit/phpunit": "^10.5 || ^11.0"
     },
     "autoload": {
         "psr-4": {
@@ -53,7 +54,17 @@
         "test:coverage": "vendor/bin/pest --coverage",
         "lint": "vendor/bin/php-cs-fixer fix --dry-run --diff",
         "format": "vendor/bin/php-cs-fixer fix",
-        "stan": "vendor/bin/phpstan analyse"
+        "stan": "vendor/bin/phpstan analyse --memory-limit=512M"
+    },
+    "archive": {
+        "exclude": [
+            ".github",
+            "tests",
+            "examples",
+            ".php-cs-fixer.dist.php",
+            "phpstan.neon.dist",
+            "phpunit.xml.dist"
+        ]
     },
     "config": {
         "sort-packages": true,

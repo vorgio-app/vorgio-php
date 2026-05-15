@@ -14,7 +14,7 @@ use Vorgio\VorgioClient;
  * @method static Checkouts checkouts()
  * @method static Invoices invoices()
  * @method static Clients clients()
- * @method static array<string, mixed> request(string $method, string $path, ?array $body = null, array $query = [], array $headers = [])
+ * @method static array<string, mixed> request(string $method, string $path, ?array<string, mixed> $body = null, array<string, mixed> $query = [], array<string, string> $headers = [])
  *
  * @see VorgioClient
  */

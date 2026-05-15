@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Vorgio\Resource;
 
+use Vorgio\InvoicePdf;
+
 /**
  * `GET/POST/PATCH/DELETE /v1/invoices` and friends.
  */
@@ -85,6 +87,37 @@ class Invoices extends AbstractResource
             $payload,
             [],
             $headers,
+        );
+    }
+
+    /**
+     * Download the invoice PDF.
+     *
+     * Pass the {@see InvoicePdf::$etag} returned from a previous call as
+     * `$ifNoneMatch` to let the server short-circuit with 304 when the PDF
+     * hasn't changed. The ETag value is opaque — pass it back exactly as
+     * received (including surrounding quotes).
+     */
+    public function pdf(string $id, ?string $ifNoneMatch = null): InvoicePdf
+    {
+        $headers = [];
+        if ($ifNoneMatch !== null) {
+            $headers['If-None-Match'] = $ifNoneMatch;
+        }
+
+        $raw = $this->client->requestRaw(
+            'GET',
+            '/invoices/'.rawurlencode($id).'/pdf',
+            [],
+            $headers,
+        );
+
+        $notModified = $raw['status'] === 304;
+
+        return new InvoicePdf(
+            bytes: $notModified ? null : $raw['body'],
+            etag: $raw['headers']['etag'] ?? '',
+            notModified: $notModified,
         );
     }
 }

@@ -25,7 +25,7 @@ return [
     | local development copy. Production users keep the default.
     |
     */
-    'base_url' => env('VORGIO_BASE_URL', 'https://app.vorgio.example'),
+    'base_url' => env('VORGIO_BASE_URL', 'https://vorgio.app'),
 
     /*
     |---------------------------------------------------------------------------
