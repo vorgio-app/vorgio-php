@@ -6,6 +6,8 @@ use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
 use Vorgio\Exception\VorgioApiException;
 use Vorgio\InvoicePdf;
+use Vorgio\Support\OperationDerivation;
+use Vorgio\Util\Uuid;
 
 it('lists invoices with cursor + include params', function (): void {
     [$client, $history] = vorgioMockClient([
@@ -168,4 +170,66 @@ it('url-encodes the invoice id when fetching the PDF', function (): void {
 
     expect((string) $req->getUri())
         ->toBe('https://vorgio.test/api/v1/invoices/inv%20with%20spaces/pdf');
+});
+
+it('derives a stable per-purpose Idempotency-Key from an operationId', function (): void {
+    [$client, $history] = vorgioMockClient([
+        jsonResponse(201, ['data' => ['id' => 'inv_1']]),
+        jsonResponse(202, ['mail_event_id' => 'me_1', 'status' => 'queued']),
+    ]);
+
+    $opId = Uuid::v7();
+    $d = new OperationDerivation($opId);
+
+    $client->invoices()->create(['client_id' => 'c1'], operationId: $opId);
+    $client->invoices()->send('inv_1', ['subject' => 'Hi', 'body' => 'pls pay'], operationId: $opId);
+
+    /** @var Request $first */
+    $first = $history[0]['request'];
+    /** @var Request $second */
+    $second = $history[1]['request'];
+
+    expect($first->getHeaderLine('Idempotency-Key'))->toBe($d->idempotencyKey('invoice.create'))
+        ->and($second->getHeaderLine('Idempotency-Key'))->toBe($d->idempotencyKey('invoice.send'))
+        // Distinct purposes → distinct keys, so the two calls don't collide.
+        ->and($first->getHeaderLine('Idempotency-Key'))->not->toBe($second->getHeaderLine('Idempotency-Key'));
+});
+
+it('replays the same Idempotency-Key + body when create() is called twice with the same operationId', function (): void {
+    [$client, $history] = vorgioMockClient([
+        jsonResponse(201, ['data' => ['id' => 'inv_1']]),
+        jsonResponse(201, ['data' => ['id' => 'inv_1']]),
+    ]);
+
+    $opId = Uuid::v7();
+    $payload = ['client_id' => 'c1', 'subject' => 'recurring', 'tax_rate' => 19];
+
+    $client->invoices()->create($payload, operationId: $opId);
+    $client->invoices()->create($payload, operationId: $opId);
+
+    /** @var Request $first */
+    $first = $history[0]['request'];
+    /** @var Request $second */
+    $second = $history[1]['request'];
+
+    expect($first->getHeaderLine('Idempotency-Key'))->toBe($second->getHeaderLine('Idempotency-Key'))
+        ->and((string) $first->getBody())->toBe((string) $second->getBody());
+});
+
+it('POSTs /v1/invoices/{id}/cancel with the operationId-derived Idempotency-Key', function (): void {
+    [$client, $history] = vorgioMockClient([
+        jsonResponse(200, ['data' => ['id' => 'inv_storno_1', 'kind' => 'storno']]),
+    ]);
+
+    $opId = Uuid::v7();
+    $response = $client->invoices()->cancel('inv_1', operationId: $opId);
+
+    /** @var Request $req */
+    $req = $history[0]['request'];
+
+    expect($req->getMethod())->toBe('POST')
+        ->and((string) $req->getUri())->toBe('https://vorgio.test/api/v1/invoices/inv_1/cancel')
+        ->and($req->getHeaderLine('Idempotency-Key'))
+        ->toBe((new OperationDerivation($opId))->idempotencyKey('invoice.cancel'))
+        ->and($response['data']['kind'])->toBe('storno');
 });

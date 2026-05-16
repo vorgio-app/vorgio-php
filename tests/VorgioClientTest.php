@@ -2,11 +2,13 @@
 
 declare(strict_types=1);
 
+use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Psr7\Request;
 use Vorgio\Exception\VorgioApiException;
 use Vorgio\Exception\VorgioException;
 use Vorgio\Exception\VorgioRateLimitedException;
 use Vorgio\Exception\VorgioValidationException;
+use Vorgio\Support\RetryPolicy;
 use Vorgio\VorgioClient;
 
 it('rejects empty tokens', function (): void {
@@ -176,5 +178,88 @@ it('captures the X-Request-Id header on errors', function (): void {
         expect(true)->toBeFalse('expected exception');
     } catch (VorgioApiException $e) {
         expect($e->requestId)->toBe('req_abc123');
+    }
+});
+
+it('retries 5xx with the same Idempotency-Key and body until a 2xx', function (): void {
+    [$client, $history] = vorgioMockClient(
+        [
+            problemResponse(503, 'Service Unavailable'),
+            jsonResponse(200, ['data' => ['id' => 'inv_1']]),
+        ],
+        retry: new RetryPolicy(enabled: true, backoffMs: [0, 0, 0]),
+    );
+
+    $result = $client->request('POST', '/invoices', ['client_id' => 'c1']);
+
+    expect($result)->toBe(['data' => ['id' => 'inv_1']])
+        ->and(count($history))->toBe(2);
+
+    /** @var Request $first */
+    $first = $history[0]['request'];
+    /** @var Request $second */
+    $second = $history[1]['request'];
+
+    $key = $first->getHeaderLine('Idempotency-Key');
+
+    expect($key)->not->toBe('')
+        ->and($second->getHeaderLine('Idempotency-Key'))->toBe($key)
+        ->and((string) $second->getBody())->toBe((string) $first->getBody());
+});
+
+it('retries on transport-level ConnectException', function (): void {
+    [$client, $history] = vorgioMockClient(
+        [
+            new ConnectException('Connection refused', new Request('POST', 'https://vorgio.test/api/v1/invoices')),
+            jsonResponse(200, ['data' => ['id' => 'inv_1']]),
+        ],
+        retry: new RetryPolicy(enabled: true, backoffMs: [0, 0, 0]),
+    );
+
+    $result = $client->request('POST', '/invoices', ['x' => 1]);
+
+    expect($result)->toBe(['data' => ['id' => 'inv_1']])
+        ->and(count($history))->toBe(2);
+});
+
+it('does not retry 4xx responses', function (): void {
+    [$client, $history] = vorgioMockClient(
+        [
+            problemResponse(
+                422,
+                'Validation failed',
+                'The given data was invalid.',
+                ['errors' => ['client.email' => ['Required.']]],
+            ),
+        ],
+        retry: new RetryPolicy(enabled: true, backoffMs: [0, 0, 0]),
+    );
+
+    try {
+        $client->request('POST', '/checkouts', ['x' => 1]);
+        expect(true)->toBeFalse('expected exception');
+    } catch (VorgioValidationException $e) {
+        expect(count($history))->toBe(1)
+            ->and($e->errors)->toBe(['client.email' => ['Required.']]);
+    }
+});
+
+it('surfaces the last 5xx response after retries are exhausted', function (): void {
+    [$client, $history] = vorgioMockClient(
+        [
+            problemResponse(503, 'Service Unavailable'),
+            problemResponse(503, 'Service Unavailable'),
+            problemResponse(503, 'Service Unavailable'),
+            problemResponse(503, 'Service Unavailable'),
+        ],
+        retry: new RetryPolicy(enabled: true, backoffMs: [0, 0, 0]),
+    );
+
+    try {
+        $client->request('POST', '/invoices', ['x' => 1]);
+        expect(true)->toBeFalse('expected exception');
+    } catch (VorgioApiException $e) {
+        expect($e->getCode())->toBe(503)
+            ->and(count($history))->toBe(4);
     }
 });

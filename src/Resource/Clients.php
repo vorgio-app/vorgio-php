@@ -30,11 +30,15 @@ class Clients extends AbstractResource
      * @param  array<string, mixed>  $payload
      * @return array<string, mixed>
      */
-    public function create(array $payload, ?string $idempotencyKey = null): array
+    public function create(array $payload, ?string $operationId = null): array
     {
-        $headers = $idempotencyKey !== null ? ['Idempotency-Key' => $idempotencyKey] : [];
-
-        return $this->request('POST', '/clients', $payload, [], $headers);
+        return $this->request(
+            'POST',
+            '/clients',
+            $payload,
+            [],
+            $this->idempotencyHeader($operationId, 'client.create'),
+        );
     }
 
     /**

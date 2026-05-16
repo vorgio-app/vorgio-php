@@ -16,19 +16,24 @@ class Checkouts extends AbstractResource
 {
     /**
      * @param  array<string, mixed>  $payload  The full checkout body — see the
-     *   API reference for shape (`client`, `invoice`, `send`, optional `metadata`).
-     * @param  string|null  $idempotencyKey  Optional. SDK auto-generates a UUIDv7
-     *   when omitted, which is correct for *new* checkouts. Pass an explicit
-     *   key when you want safe replays.
+     *   API reference for shape (`client`, `invoice`, `send`, optional
+     *   `every` for recurring templates, optional `metadata`).
+     * @param  string|null  $operationId  UUIDv7 identifying a higher-level
+     *   operation this call is part of. Two calls with the same operation id
+     *   produce the same `Idempotency-Key`, so queue retries replay the
+     *   cached 2xx instead of generating a fresh one. Pass `null` for
+     *   one-shot single-request checkouts (the SDK auto-generates a fresh
+     *   UUIDv7 in that case).
      * @return array<string, mixed>
      */
-    public function create(array $payload, ?string $idempotencyKey = null): array
+    public function create(array $payload, ?string $operationId = null): array
     {
-        $headers = [];
-        if ($idempotencyKey !== null) {
-            $headers['Idempotency-Key'] = $idempotencyKey;
-        }
-
-        return $this->request('POST', '/checkouts', $payload, [], $headers);
+        return $this->request(
+            'POST',
+            '/checkouts',
+            $payload,
+            [],
+            $this->idempotencyHeader($operationId, 'checkout.create'),
+        );
     }
 }

@@ -30,13 +30,22 @@ class Invoices extends AbstractResource
 
     /**
      * @param  array<string, mixed>  $payload
+     * @param  string|null  $operationId  UUIDv7 identifying a higher-level
+     *   operation this call is part of. Two calls with the same operation id
+     *   and the same purpose produce the same `Idempotency-Key`, so queue
+     *   retries replay the cached 2xx instead of generating a fresh one. Pass
+     *   `null` for one-shot single-request POSTs.
      * @return array<string, mixed>
      */
-    public function create(array $payload, ?string $idempotencyKey = null): array
+    public function create(array $payload, ?string $operationId = null): array
     {
-        $headers = $idempotencyKey !== null ? ['Idempotency-Key' => $idempotencyKey] : [];
-
-        return $this->request('POST', '/invoices', $payload, [], $headers);
+        return $this->request(
+            'POST',
+            '/invoices',
+            $payload,
+            [],
+            $this->idempotencyHeader($operationId, 'invoice.create'),
+        );
     }
 
     /**
@@ -60,16 +69,14 @@ class Invoices extends AbstractResource
      * @param  array{subject: string, body: string, cc?: array<int, string>}  $payload
      * @return array<string, mixed>
      */
-    public function send(string $id, array $payload, ?string $idempotencyKey = null): array
+    public function send(string $id, array $payload, ?string $operationId = null): array
     {
-        $headers = $idempotencyKey !== null ? ['Idempotency-Key' => $idempotencyKey] : [];
-
         return $this->request(
             'POST',
             '/invoices/'.rawurlencode($id).'/send',
             $payload,
             [],
-            $headers,
+            $this->idempotencyHeader($operationId, 'invoice.send'),
         );
     }
 
@@ -77,16 +84,32 @@ class Invoices extends AbstractResource
      * @param  array{paid_at?: string}  $payload
      * @return array<string, mixed>
      */
-    public function markPaid(string $id, array $payload = [], ?string $idempotencyKey = null): array
+    public function markPaid(string $id, array $payload = [], ?string $operationId = null): array
     {
-        $headers = $idempotencyKey !== null ? ['Idempotency-Key' => $idempotencyKey] : [];
-
         return $this->request(
             'POST',
             '/invoices/'.rawurlencode($id).'/mark-paid',
             $payload,
             [],
-            $headers,
+            $this->idempotencyHeader($operationId, 'invoice.mark-paid'),
+        );
+    }
+
+    /**
+     * Issue a Stornorechnung (German legal cancellation) for a finalised
+     * invoice. The original stays in place — required by UStG §14c / GoBD —
+     * and the server creates a reversing invoice in its stead.
+     *
+     * @return array<string, mixed>  The Stornorechnung resource.
+     */
+    public function cancel(string $id, ?string $operationId = null): array
+    {
+        return $this->request(
+            'POST',
+            '/invoices/'.rawurlencode($id).'/cancel',
+            [],
+            [],
+            $this->idempotencyHeader($operationId, 'invoice.cancel'),
         );
     }
 
