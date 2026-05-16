@@ -1,7 +1,6 @@
 includes:
     - vendor/larastan/larastan/extension.neon
     - vendor/pestphp/pest/extension.neon
-    - vendor/imsuperlative/phpstan-pest/extension.neon
 
 parameters:
     level: 5
@@ -10,5 +9,3 @@ parameters:
         - tests
     configDirectories:
         - src/Laravel/config
-    PhpstanPest:
-        testCaseClass: Vorgio\Tests\Laravel\TestCase
