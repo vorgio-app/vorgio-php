@@ -93,16 +93,83 @@ contract for each request/response shape lives at
 
 `POST` / `PATCH` / `PUT` / `DELETE` requests automatically receive a UUIDv7
 `Idempotency-Key` header when you don't provide one — that's the right
-default for genuinely new requests. Pass an explicit key when you want safe
-replays:
+default for genuinely new one-shot requests.
+
+For multi-step flows (a queued job, a checkout that fires three sequential
+POSTs, anything that retries) pass an `operationId` instead. The SDK then
+derives a stable, per-purpose `Idempotency-Key` from your operation id —
+the same operation id produces the same key every time, so queue retries
+and midnight-cross retries replay the server's cached 2xx instead of
+generating a fresh side-effect.
 
 ```php
-$vorgio->checkouts()->create($body, idempotencyKey: 'wc_order_'.$order->id);
+use Vorgio\Util\Uuid;
+
+$opId = Uuid::v7();           // persist this before the call
+$vorgio->checkouts()->create($body, operationId: $opId);
+
+// Later, on retry — same op id, same Idempotency-Key, same cached response:
+$vorgio->checkouts()->create($body, operationId: $opId);
 ```
 
 If you ship the same idempotency key twice within the server's retention
 window, you get back the original response with an
 `Idempotency-Replay: true` header.
+
+### Internal retry
+
+By default the SDK retries up to three times on transport errors and 5xx
+responses (with exponential backoff: 200ms, 800ms, 3200ms), replaying the
+same `Idempotency-Key` and body on each attempt. 4xx responses are never
+retried; 429 keeps its caller-driven `Retry-After`-aware flow. Disable per
+client when you'd rather handle retries yourself:
+
+```php
+use Vorgio\Support\RetryPolicy;
+
+$vorgio = new VorgioClient(token: '…', retry: RetryPolicy::disabled());
+```
+
+## Recurring billing
+
+Use `subscriptions()` for any flow with an `every` cadence — membership
+billing, SaaS, anything that issues invoices on a schedule. The resource
+maps cleanly onto Vorgio's recurring-template verbs:
+
+```php
+use Vorgio\Util\Uuid;
+
+$opId = Uuid::v7();
+
+// Provision the client + recurring template + send the first invoice
+// in one call. Powered by /v1/checkouts under the hood.
+$started = $vorgio->subscriptions()->start([
+    'client'  => [/* … */],
+    'every'   => 'monthly',
+    'invoice' => [
+        'subject'   => 'Mitgliedsbeitrag',
+        'tax_rate'  => 19,
+        'positions' => [['mode' => 'fixed', 'amount_cents' => 9900]],
+    ],
+], operationId: $opId);
+
+$templateId = $started['data']['invoice']['id'];
+
+// Change cadence in place — no new invoice issued, just the template's
+// `every` and `next_invoice_at` updated.
+$vorgio->subscriptions()->changeCycle($templateId, 'yearly', operationId: $opId);
+
+// Stop future generation without deleting the template (full audit
+// trail stays visible in the operator dashboard).
+$vorgio->subscriptions()->stop($templateId, operationId: $opId);
+
+// Issue a Stornorechnung for a finalised invoice (UStG §14c-compliant
+// legal cancellation). Use this for the open child invoice, not the
+// recurring template itself.
+$vorgio->invoices()->cancel('inv_abc', operationId: $opId);
+```
+
+See `examples/recurring-billing.php` for an end-to-end smoke flow.
 
 ## Downloading PDFs
 
@@ -199,6 +266,77 @@ Vorgio::checkouts()->create([...]);
 ```
 
 …or inject `Vorgio\VorgioClient` via the container.
+
+### Cashier-style recurring billing
+
+For Laravel apps doing recurring billing — SaaS, membership dues, anything
+on a cadence — the package ships a Cashier-style `Billable` trait that
+absorbs every correctness primitive (idempotency keys, queue-retry safety,
+midnight-cross timestamping, customer/subscription persistence) into the
+package. **No columns are ever added to your domain tables.** All Vorgio
+state lives in package-owned polymorphic tables:
+`vorgio_billables`, `vorgio_subscriptions`, `vorgio_operations`,
+`vorgio_invoices`.
+
+The migrations are auto-loaded by the service provider. Run them once and
+add the trait to the model that represents your paying customer:
+
+```bash
+php artisan migrate
+```
+
+```php
+use Vorgio\Laravel\Billable;
+
+class Association extends Model
+{
+    use Billable;
+}
+```
+
+Then the model gains:
+
+```php
+// Start a recurring subscription. Idempotent: a second call returns the
+// existing subscription without hitting the API.
+$subscription = $association->subscribe('monthly', [
+    'subject'   => 'Mitgliedsbeitrag',
+    'tax_rate'  => 19,
+    'positions' => [['mode' => 'fixed', 'amount_cents' => 9900]],
+]);
+
+// Change cadence in place.
+$association->changeBillingCycle('yearly');
+
+// End the arrangement. Pick the child-invoice strategy that matches
+// your product's "cancel my subscription" semantics:
+//   'stop-only'        — stop future invoices only.
+//   'storno-always'    — also Storno the open child invoice.
+//   'storno-if-unpaid' — Storno only when the child is unpaid (SaaS default).
+$association->cancelSubscription('storno-if-unpaid');
+
+// Helpers + relations:
+$association->hasActiveSubscription();
+$association->latestOpenInvoiceId();
+$association->vorgioSubscriptions;     // HasManyThrough → Subscription
+$association->vorgioInvoices;          // HasManyThrough → Invoice (webhook mirror)
+```
+
+Set `VORGIO_WEBHOOK_SECRET` in `.env` and the package registers
+`POST /vorgio/webhook` for you. It verifies the signature, upserts the
+local mirror tables, and dispatches typed Laravel events:
+
+```php
+use Illuminate\Support\Facades\Event;
+use Vorgio\Laravel\Events\VorgioInvoicePaid;
+
+Event::listen(VorgioInvoicePaid::class, function (VorgioInvoicePaid $event): void {
+    // $event->invoice — Vorgio\Laravel\Models\Invoice (local mirror row)
+    // $event->webhookEvent — Vorgio\WebhookEvent (raw, full server payload)
+});
+```
+
+See `examples/cashier-style.php` for a sketch of the full flow.
 
 ## Custom HTTP client
 
