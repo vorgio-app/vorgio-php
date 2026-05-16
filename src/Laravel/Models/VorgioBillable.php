@@ -17,6 +17,11 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  * {@see \Vorgio\Laravel\Billable} populates this on the first
  * `subscribe()` / `createAsVorgioCustomer()` call and points the consumer
  * back here for relationship access.
+ *
+ * @property string $id
+ * @property string $billable_type
+ * @property int $billable_id
+ * @property string $vorgio_client_id
  */
 class VorgioBillable extends Model
 {
