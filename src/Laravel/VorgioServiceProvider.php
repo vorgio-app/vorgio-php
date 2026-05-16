@@ -6,8 +6,11 @@ namespace Vorgio\Laravel;
 
 use Illuminate\Contracts\Config\Repository as ConfigRepository;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Vorgio\Exception\VorgioException;
+use Vorgio\Laravel\Http\WebhookController;
+use Vorgio\Support\RetryPolicy;
 use Vorgio\VorgioClient;
 
 /**
@@ -37,6 +40,9 @@ class VorgioServiceProvider extends ServiceProvider
                 token: $token,
                 baseUrl: (string) $config->get('vorgio.base_url', 'https://vorgio.app'),
                 timeout: (float) $config->get('vorgio.timeout', VorgioClient::DEFAULT_TIMEOUT),
+                retry: new RetryPolicy(
+                    enabled: (bool) $config->get('vorgio.retry.enabled', true),
+                ),
             );
         });
 
@@ -45,11 +51,36 @@ class VorgioServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $this->loadMigrationsFrom(__DIR__.'/database/migrations');
+
+        $this->registerWebhookRoute();
+
         if ($this->app->runningInConsole()) {
             $this->publishes([
                 __DIR__.'/config/vorgio.php' => $this->app->configPath('vorgio.php'),
             ], 'vorgio-config');
+
+            $this->publishes([
+                __DIR__.'/database/migrations' => $this->app->databasePath('migrations'),
+            ], 'vorgio-migrations');
         }
+    }
+
+    private function registerWebhookRoute(): void
+    {
+        $secret = (string) config('vorgio.webhook.secret', '');
+        if ($secret === '') {
+            // No webhook secret set → don't register a route. Consumers
+            // can still POST manually if they wire it up themselves.
+            return;
+        }
+
+        $route = (string) config('vorgio.webhook.route', '/vorgio/webhook');
+        $middleware = (array) config('vorgio.webhook.middleware', ['api']);
+
+        Route::middleware($middleware)
+            ->post($route, WebhookController::class)
+            ->name('vorgio.webhook');
     }
 
     /**

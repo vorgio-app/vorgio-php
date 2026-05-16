@@ -8,7 +8,10 @@ use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Middleware;
 use GuzzleHttp\Psr7\Response;
 use Vorgio\Support\RetryPolicy;
+use Vorgio\Tests\Laravel\TestCase;
 use Vorgio\VorgioClient;
+
+uses(TestCase::class)->in('Laravel');
 
 /**
  * Build a {@see VorgioClient} backed by Guzzle's MockHandler.
@@ -46,6 +49,35 @@ function vorgioMockClient(array $responses, string $token = 'act_test', ?RetryPo
     );
 
     return [$client, $history];
+}
+
+/**
+ * Bind a Guzzle MockHandler-backed {@see VorgioClient} into the container
+ * so trait calls (`app(VorgioClient::class)`) hit the mock. Mirrors the
+ * non-Laravel `vorgioMockClient()` helper but with container wiring.
+ *
+ * @param  array<int, Response|\GuzzleHttp\Exception\GuzzleException>  $responses
+ * @return ArrayObject<int, array>
+ */
+function vorgioBindMockClient(array $responses): ArrayObject
+{
+    /** @var ArrayObject<int, array> $history */
+    $history = new ArrayObject();
+
+    $mock = new MockHandler($responses);
+    $stack = HandlerStack::create($mock);
+    $stack->push(Middleware::history($history));
+
+    $http = new Client(['handler' => $stack, 'http_errors' => false]);
+
+    app()->instance(VorgioClient::class, new VorgioClient(
+        token: 'act_test',
+        baseUrl: 'https://vorgio.test',
+        httpClient: $http,
+        retry: RetryPolicy::disabled(),
+    ));
+
+    return $history;
 }
 
 /**
