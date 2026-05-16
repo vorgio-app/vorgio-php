@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use GuzzleHttp\Psr7\Request;
+use Vorgio\Support\OperationDerivation;
+use Vorgio\Util\Uuid;
 
 it('POSTs /api/v1/checkouts with the provided body', function (): void {
     [$client, $history] = vorgioMockClient([
@@ -42,15 +44,23 @@ it('POSTs /api/v1/checkouts with the provided body', function (): void {
         ->and($response['data']['mail_event_id'])->toBe('me_1');
 });
 
-it('forwards an explicit idempotency key when one is given', function (): void {
+it('derives a stable Idempotency-Key from an operationId', function (): void {
     [$client, $history] = vorgioMockClient([
+        jsonResponse(201, ['data' => []]),
         jsonResponse(201, ['data' => []]),
     ]);
 
-    $client->checkouts()->create(['client' => []], idempotencyKey: 'wc_order_999');
+    $opId = Uuid::v7();
+    $expectedKey = (new OperationDerivation($opId))->idempotencyKey('checkout.create');
 
-    /** @var Request $req */
-    $req = $history[0]['request'];
+    $client->checkouts()->create(['client' => []], operationId: $opId);
+    $client->checkouts()->create(['client' => []], operationId: $opId);
 
-    expect($req->getHeaderLine('Idempotency-Key'))->toBe('wc_order_999');
+    /** @var Request $first */
+    $first = $history[0]['request'];
+    /** @var Request $second */
+    $second = $history[1]['request'];
+
+    expect($first->getHeaderLine('Idempotency-Key'))->toBe($expectedKey)
+        ->and($second->getHeaderLine('Idempotency-Key'))->toBe($expectedKey);
 });

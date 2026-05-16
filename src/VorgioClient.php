@@ -17,6 +17,8 @@ use Vorgio\Exception\VorgioValidationException;
 use Vorgio\Resource\Checkouts;
 use Vorgio\Resource\Clients;
 use Vorgio\Resource\Invoices;
+use Vorgio\Resource\Subscriptions;
+use Vorgio\Support\RetryPolicy;
 use Vorgio\Util\Uuid;
 
 /**
@@ -37,7 +39,7 @@ use Vorgio\Util\Uuid;
  */
 class VorgioClient
 {
-    public const VERSION = '0.1.0';
+    public const VERSION = '0.2.0';
 
     /**
      * Default request timeout in seconds. Overridable per call via the
@@ -47,12 +49,15 @@ class VorgioClient
 
     private ClientInterface $http;
 
+    public readonly RetryPolicy $retry;
+
     public function __construct(
         public readonly string $token,
         public readonly string $baseUrl = 'https://vorgio.app',
         ?ClientInterface $httpClient = null,
         public readonly float $timeout = self::DEFAULT_TIMEOUT,
         public readonly string $apiVersion = 'v1',
+        ?RetryPolicy $retry = null,
     ) {
         if (trim($token) === '') {
             throw new VorgioException('Vorgio API token cannot be empty.');
@@ -63,6 +68,8 @@ class VorgioClient
             'connect_timeout' => 10.0,
             'http_errors' => false,
         ]);
+
+        $this->retry = $retry ?? new RetryPolicy();
     }
 
     public function checkouts(): Checkouts
@@ -78,6 +85,11 @@ class VorgioClient
     public function clients(): Clients
     {
         return new Clients($this);
+    }
+
+    public function subscriptions(): Subscriptions
+    {
+        return new Subscriptions($this);
     }
 
     /**
@@ -171,7 +183,9 @@ class VorgioClient
         ];
 
         // Auto-attach an Idempotency-Key for state-changing methods unless
-        // the caller already provided one.
+        // the caller already provided one. Computed once outside the retry
+        // loop so every attempt sends the same key — that's exactly what
+        // lets the Vorgio middleware replay the cached 2xx.
         if (in_array($method, ['POST', 'PATCH', 'PUT', 'DELETE'], true)
             && ! isset($headers['idempotency-key'])) {
             $finalHeaders['idempotency-key'] = Uuid::v7();
@@ -197,23 +211,81 @@ class VorgioClient
 
         $url = $this->buildUrl($path);
 
-        try {
-            return $this->http->request($method, $url, $options);
-        } catch (ConnectException $e) {
-            throw new VorgioException(
-                'Could not reach Vorgio at '.$url.': '.$e->getMessage(),
-                0,
-                $e,
-            );
-        } catch (RequestException $e) {
-            $response = $e->getResponse();
-            if ($response === null) {
+        return $this->dispatchWithRetry($method, $url, $options);
+    }
+
+    /**
+     * @param  array<string, mixed>  $options
+     */
+    private function dispatchWithRetry(string $method, string $url, array $options): ResponseInterface
+    {
+        $attempt = 0;
+        $lastResponse = null;
+        $lastTransportError = null;
+
+        while (true) {
+            try {
+                $response = $this->http->request($method, $url, $options);
+                $status = $response->getStatusCode();
+
+                if (! $this->retry->shouldRetry($status, $attempt)) {
+                    return $response;
+                }
+
+                $lastResponse = $response;
+            } catch (ConnectException $e) {
+                if (! $this->retry->shouldRetry(null, $attempt)) {
+                    throw new VorgioException(
+                        'Could not reach Vorgio at '.$url.': '.$e->getMessage(),
+                        0,
+                        $e,
+                    );
+                }
+
+                $lastTransportError = $e;
+            } catch (RequestException $e) {
+                // RequestException with a response: treat like a normal HTTP
+                // result and let the retry policy decide.
+                $response = $e->getResponse();
+                if ($response === null) {
+                    throw new VorgioException('Vorgio request failed: '.$e->getMessage(), 0, $e);
+                }
+
+                if (! $this->retry->shouldRetry($response->getStatusCode(), $attempt)) {
+                    return $response;
+                }
+
+                $lastResponse = $response;
+            } catch (GuzzleException $e) {
                 throw new VorgioException('Vorgio request failed: '.$e->getMessage(), 0, $e);
             }
 
-            return $response;
-        } catch (GuzzleException $e) {
-            throw new VorgioException('Vorgio request failed: '.$e->getMessage(), 0, $e);
+            $this->sleep($this->retry->delayMs($attempt));
+            $attempt++;
+
+            // Defensive: if shouldRetry returned true but we somehow exceeded
+            // the cap, surface whatever we last saw rather than looping.
+            if ($attempt > $this->retry->maxAttempts()) {
+                if ($lastResponse !== null) {
+                    return $lastResponse;
+                }
+
+                throw new VorgioException(
+                    'Could not reach Vorgio at '.$url.' after '.$this->retry->maxAttempts().' retries.',
+                    0,
+                    $lastTransportError,
+                );
+            }
+        }
+    }
+
+    /**
+     * Sleep hook — separated so tests can subclass and stub it out.
+     */
+    protected function sleep(int $ms): void
+    {
+        if ($ms > 0) {
+            usleep($ms * 1000);
         }
     }
 

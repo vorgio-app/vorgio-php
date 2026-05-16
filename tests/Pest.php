@@ -7,6 +7,7 @@ use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Middleware;
 use GuzzleHttp\Psr7\Response;
+use Vorgio\Support\RetryPolicy;
 use Vorgio\VorgioClient;
 
 /**
@@ -20,7 +21,7 @@ use Vorgio\VorgioClient;
  * @param  array<int, Response|\GuzzleHttp\Exception\GuzzleException>  $responses
  * @return array{0: VorgioClient, 1: ArrayObject<int, array>}
  */
-function vorgioMockClient(array $responses, string $token = 'act_test'): array
+function vorgioMockClient(array $responses, string $token = 'act_test', ?RetryPolicy $retry = null): array
 {
     /** @var ArrayObject<int, array> $history */
     $history = new ArrayObject();
@@ -34,10 +35,14 @@ function vorgioMockClient(array $responses, string $token = 'act_test'): array
         'http_errors' => false,
     ]);
 
+    // Default to a no-retry policy so existing tests that queue a single
+    // 5xx response still observe the expected failure. Retry-specific
+    // tests pass a zero-backoff policy explicitly.
     $client = new VorgioClient(
         token: $token,
         baseUrl: 'https://vorgio.test',
         httpClient: $http,
+        retry: $retry ?? RetryPolicy::disabled(),
     );
 
     return [$client, $history];
