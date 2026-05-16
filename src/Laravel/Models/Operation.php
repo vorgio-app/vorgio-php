@@ -7,6 +7,7 @@ namespace Vorgio\Laravel\Models;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
+use Illuminate\Support\Carbon;
 
 /**
  * One row per in-flight operation against the Vorgio API.
@@ -18,6 +19,16 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  *
  * Consumers normally never touch this table directly. It's exposed as a
  * model so power users can introspect stuck operations from a console.
+ *
+ * @property string $id
+ * @property string $billable_type
+ * @property int $billable_id
+ * @property string $purpose
+ * @property string $operation_id
+ * @property string $status
+ * @property int $attempts
+ * @property Carbon|null $last_attempted_at
+ * @property Carbon|null $completed_at
  */
 class Operation extends Model
 {

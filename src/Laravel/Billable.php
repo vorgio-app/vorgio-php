@@ -43,11 +43,17 @@ use Vorgio\VorgioClient;
  */
 trait Billable
 {
+    /**
+     * @return MorphOne<VorgioBillable, $this>
+     */
     public function vorgioBillable(): MorphOne
     {
         return $this->morphOne(VorgioBillable::class, 'billable');
     }
 
+    /**
+     * @return HasManyThrough<Subscription, VorgioBillable, $this>
+     */
     public function vorgioSubscriptions(): HasManyThrough
     {
         return $this->hasManyThrough(
@@ -63,6 +69,9 @@ trait Billable
         );
     }
 
+    /**
+     * @return HasManyThrough<Invoice, VorgioBillable, $this>
+     */
     public function vorgioInvoices(): HasManyThrough
     {
         return $this->hasManyThrough(
@@ -78,6 +87,9 @@ trait Billable
         );
     }
 
+    /**
+     * @return HasOneThrough<Subscription, VorgioBillable, $this>
+     */
     public function vorgioSubscription(): HasOneThrough
     {
         return $this->hasOneThrough(
@@ -118,7 +130,6 @@ trait Billable
      */
     public function latestOpenInvoiceId(): ?string
     {
-        /** @var Invoice|null $invoice */
         $invoice = $this->vorgioInvoices()
             ->where('status', Invoice::STATUS_SENT)
             ->orderByDesc('sent_at')
@@ -292,9 +303,9 @@ trait Billable
                     return $stop;
                 }
 
-                if ($childInvoiceStrategy === 'storno-always'
-                    || ($childInvoiceStrategy === 'storno-if-unpaid' && $this->latestOpenChildIsUnpaid())
-                ) {
+                // After the stop-only early-return above, $childInvoiceStrategy
+                // is either 'storno-always' or 'storno-if-unpaid'.
+                if ($childInvoiceStrategy === 'storno-always' || $this->latestOpenChildIsUnpaid()) {
                     // The stop + cancel pair share one operation id, so the
                     // Idempotency-Key for the cancel is derived as a
                     // sub-key — different purpose tag, same operation.
@@ -333,7 +344,6 @@ trait Billable
 
     private function latestOpenChildIsUnpaid(): bool
     {
-        /** @var Invoice|null $invoice */
         $invoice = $this->vorgioInvoices()
             ->where('status', Invoice::STATUS_SENT)
             ->orderByDesc('sent_at')
@@ -353,7 +363,6 @@ trait Billable
             return $billable;
         }
 
-        /** @var VorgioBillable $created */
         $created = $this->vorgioBillable()->create([
             'vorgio_client_id' => $vorgioClientId,
         ]);
