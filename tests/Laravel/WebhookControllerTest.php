@@ -2,7 +2,10 @@
 
 declare(strict_types=1);
 
+use Illuminate\Contracts\Http\Kernel;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Testing\TestResponse;
 use Vorgio\Laravel\Events\VorgioBillingCycleChanged;
 use Vorgio\Laravel\Events\VorgioInvoiceCancelled;
 use Vorgio\Laravel\Events\VorgioInvoicePaid;
@@ -12,6 +15,34 @@ use Vorgio\Laravel\Models\Invoice;
 use Vorgio\Laravel\Models\Subscription;
 use Vorgio\Tests\Laravel\TestAssociation;
 use Vorgio\Webhooks;
+
+/**
+ * Submit a raw, pre-signed webhook payload to the package's webhook
+ * route by handing a Symfony Request directly to the HTTP kernel.
+ *
+ * Avoids the Laravel test-helper trait so we never have to type-resolve
+ * Pest's runtime `$this` binding statically — `app(Kernel::class)` is
+ * sufficient and gives a fully-typed return through Larastan stubs.
+ */
+function postRawWebhook(string $payload, string $signatureHeader): TestResponse
+{
+    $request = Request::create(
+        '/vorgio/webhook',
+        'POST',
+        [],
+        [],
+        [],
+        [
+            'HTTP_VORGIO-SIGNATURE' => $signatureHeader,
+            'CONTENT_TYPE' => 'application/json',
+        ],
+        $payload,
+    );
+
+    $response = app(Kernel::class)->handle($request);
+
+    return TestResponse::fromBaseResponse($response);
+}
 
 function signedPayload(string $type, array $data): array
 {
@@ -28,7 +59,7 @@ function signedPayload(string $type, array $data): array
 it('rejects a webhook with a bad signature', function (): void {
     [$payload] = signedPayload('invoice.sent', []);
 
-    $response = $this->postRawWebhook($payload, 't=1234567890,v1=deadbeef');
+    $response = postRawWebhook($payload, 't=1234567890,v1=deadbeef');
 
     expect($response->status())->toBe(400);
 });
@@ -49,7 +80,7 @@ it('upserts an Invoice mirror row and dispatches VorgioInvoiceSent on invoice.se
         ],
     ]);
 
-    $response = $this->postRawWebhook($payload, $sig);
+    $response = postRawWebhook($payload, $sig);
 
     expect($response->status())->toBe(200);
 
@@ -77,7 +108,7 @@ it('marks the mirror row paid and dispatches VorgioInvoicePaid on invoice.paid',
         ],
     ]);
 
-    $response = $this->postRawWebhook($payload, $sig);
+    $response = postRawWebhook($payload, $sig);
 
     expect($response->status())->toBe(200);
 
@@ -103,7 +134,7 @@ it('marks the mirror cancelled and dispatches VorgioInvoiceCancelled on invoice.
         ],
     ]);
 
-    $this->postRawWebhook($payload, $sig);
+    postRawWebhook($payload, $sig);
 
     $mirror = Invoice::query()->where('vorgio_invoice_id', 'inv_1')->first();
     expect($mirror->status)->toBe(Invoice::STATUS_CANCELLED);
@@ -128,7 +159,7 @@ it('updates the Subscription mirror on invoice.recurring.stopped', function (): 
         'stopped_at' => '2026-05-17T10:00:00Z',
     ]);
 
-    $this->postRawWebhook($payload, $sig);
+    postRawWebhook($payload, $sig);
 
     expect($subscription->fresh()->status)->toBe(Subscription::STATUS_STOPPED);
     Event::assertDispatched(VorgioSubscriptionStopped::class);
@@ -150,7 +181,7 @@ it('updates the Subscription mirror on invoice.recurring.cycle-changed', functio
         'invoice' => ['id' => 'inv_1', 'every' => 'yearly', 'next_invoice_at' => '2027-05-16'],
     ]);
 
-    $this->postRawWebhook($payload, $sig);
+    postRawWebhook($payload, $sig);
 
     expect($subscription->fresh()->every)->toBe('yearly');
     Event::assertDispatched(VorgioBillingCycleChanged::class);
@@ -164,8 +195,8 @@ it('re-delivery of the same invoice event is idempotent (updateOrCreate, single 
         'invoice' => ['id' => 'inv_1', 'client_id' => 'cli_1', 'total_cents' => 9900],
     ]);
 
-    $this->postRawWebhook($payload, $sig);
-    $this->postRawWebhook($payload, $sig);
+    postRawWebhook($payload, $sig);
+    postRawWebhook($payload, $sig);
 
     expect(Invoice::query()->where('vorgio_invoice_id', 'inv_1')->count())->toBe(1);
 });
@@ -175,7 +206,7 @@ it('skips webhooks for unknown clients (race with subscribe local-write)', funct
         'invoice' => ['id' => 'inv_1', 'client_id' => 'cli_unknown'],
     ]);
 
-    $response = $this->postRawWebhook($payload, $sig);
+    $response = postRawWebhook($payload, $sig);
 
     expect($response->status())->toBe(200)
         ->and(Invoice::query()->count())->toBe(0);
@@ -187,7 +218,7 @@ it('ignores unknown event types without crashing', function (): void {
 
     [$payload, $sig] = signedPayload('something.unknown', ['foo' => 'bar']);
 
-    $response = $this->postRawWebhook($payload, $sig);
+    $response = postRawWebhook($payload, $sig);
 
     expect($response->status())->toBe(200);
 });

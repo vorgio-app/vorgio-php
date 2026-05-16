@@ -7,7 +7,6 @@ namespace Vorgio\Tests\Laravel;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Testing\TestResponse;
 use Orchestra\Testbench\TestCase as BaseTestCase;
 use Vorgio\Laravel\VorgioServiceProvider;
 
@@ -56,26 +55,5 @@ abstract class TestCase extends BaseTestCase
         $app['config']->set('vorgio.base_url', 'https://vorgio.test');
         $app['config']->set('vorgio.retry.enabled', false);
         $app['config']->set('vorgio.webhook.secret', 'wsec_test');
-    }
-
-    /**
-     * Submit a raw, pre-signed webhook payload to the package's webhook
-     * route. Lives on TestCase rather than as a global helper so the call
-     * sees `$this` as the TestCase (and `call()` is therefore typed).
-     */
-    public function postRawWebhook(string $payload, string $signatureHeader): TestResponse
-    {
-        return $this->call(
-            'POST',
-            '/vorgio/webhook',
-            [],
-            [],
-            [],
-            [
-                'HTTP_VORGIO-SIGNATURE' => $signatureHeader,
-                'CONTENT_TYPE' => 'application/json',
-            ],
-            $payload,
-        );
     }
 }
