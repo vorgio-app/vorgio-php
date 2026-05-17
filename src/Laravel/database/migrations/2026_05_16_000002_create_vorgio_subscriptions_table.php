@@ -17,9 +17,10 @@ return new class () extends Migration {
                 ->constrained($prefix.'billables')
                 ->cascadeOnDelete();
             $table->string('vorgio_invoice_id')->unique();
-            $table->string('every');
+            $table->string('every', 32);
             $table->dateTime('next_invoice_at')->nullable();
-            $table->string('status')->default('active');
+            // Short cap — values are constants from a small set.
+            $table->string('status', 16)->default('active');
             $table->dateTime('started_at')->nullable();
             $table->dateTime('stopped_at')->nullable();
             $table->dateTime('cancelled_at')->nullable();

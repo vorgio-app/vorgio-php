@@ -24,7 +24,8 @@ return new class () extends Migration {
                 ->cascadeOnDelete();
             $table->string('vorgio_invoice_id')->unique();
             $table->string('parent_invoice_id')->nullable()->index();
-            $table->string('status')->default('draft');
+            // Short cap — values are constants from a small set.
+            $table->string('status', 16)->default('draft');
             $table->unsignedBigInteger('total_cents')->default(0);
             $table->string('currency', 3)->default('EUR');
             // Optional fields surfaced by the webhook payload that consumer

@@ -13,12 +13,17 @@ return new class () extends Migration {
 
         Schema::create($prefix.'billables', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->string('billable_type');
+            // Lengths capped so the composite indexes below stay under the
+            // 3072-byte combined-key limit MySQL enforces under utf8mb4.
+            // Defaults (varchar(255)) blow that budget the moment the index
+            // touches more than one string column.
+            $table->string('billable_type', 191);
             // String column rather than unsignedBigInteger so the polymorphic
             // key can hold either a bigint or a UUID. MVGV's Association uses
             // HasUuids; coercing a UUID into a bigint silently truncates to
-            // 0 and breaks every polymorphic lookup. String works for both.
-            $table->string('billable_id');
+            // 0 and breaks every polymorphic lookup. String works for both;
+            // 64 chars accommodates UUIDs (36) and bigints (≤20).
+            $table->string('billable_id', 64);
             $table->string('vorgio_client_id')->unique();
             $table->timestamps();
 

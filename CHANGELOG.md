@@ -4,6 +4,30 @@ All notable changes to `vorgio-app/vorgio-php` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] — 2026-05-17
+
+Follow-up patch release. v0.2.1's `vorgio_operations` composite index
+exceeded MySQL's 3072-byte combined-key cap under utf8mb4 — every
+consumer running migrations against MySQL would hit `SQLSTATE[42000]:
+1071 Specified key was too long`. SQLite (the SDK's own test driver)
+doesn't enforce that limit, which is why the v0.2.1 suite passed and the
+regression slipped through. v0.2.2 caps the string columns used in the
+composite indexes to lengths that fit the budget.
+
+### Fixed
+
+- **`vorgio_operations` composite index now fits MySQL utf8mb4.** Column
+  lengths capped: `billable_type` 191, `billable_id` 64, `purpose` 32,
+  `status` 16. Combined index footprint drops from 4 080 bytes to
+  ~1 212 bytes.
+- **`vorgio_billables`** — `billable_type` 191, `billable_id` 64.
+- **`vorgio_subscriptions`** — `every` 32, `status` 16.
+- **`vorgio_invoices`** — `status` 16.
+
+No data migration is required: consumers who failed to migrate at
+v0.2.1 against MySQL can drop the new constraint by re-running
+`php artisan migrate` after upgrading.
+
 ## [0.2.1] — 2026-05-17
 
 Patch release. Fixes two Laravel-layer issues uncovered while wiring v0.2.0
@@ -142,6 +166,7 @@ SDK) or the new `Vorgio\Laravel\Billable` trait (Laravel apps).
 
 Initial public release.
 
+[0.2.2]: https://github.com/vorgio-app/vorgio-php/releases/tag/v0.2.2
 [0.2.1]: https://github.com/vorgio-app/vorgio-php/releases/tag/v0.2.1
 [0.2.0]: https://github.com/vorgio-app/vorgio-php/releases/tag/v0.2.0
 [0.1.0]: https://github.com/vorgio-app/vorgio-php/releases/tag/v0.1.0
