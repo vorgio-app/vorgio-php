@@ -25,7 +25,10 @@ return new class () extends Migration {
             // not at vorgio_billables — the consumer always exists, the
             // Vorgio mapping might not yet on the first `subscribe()` call.
             $table->string('billable_type');
-            $table->unsignedBigInteger('billable_id');
+            // String, not unsignedBigInteger — see the matching note on
+            // vorgio_billables. The polymorphic id must accommodate both
+            // bigint and UUID consumer keys.
+            $table->string('billable_id');
             $table->string('purpose');
             $table->uuid('operation_id')->unique();
             $table->string('status')->default('pending');

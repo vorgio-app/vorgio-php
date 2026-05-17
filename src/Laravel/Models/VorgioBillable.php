@@ -20,7 +20,7 @@ use Illuminate\Database\Eloquent\Relations\MorphTo;
  *
  * @property string $id
  * @property string $billable_type
- * @property int $billable_id
+ * @property string $billable_id
  * @property string $vorgio_client_id
  */
 class VorgioBillable extends Model
@@ -28,10 +28,6 @@ class VorgioBillable extends Model
     use HasUuids;
 
     protected $guarded = [];
-
-    protected $casts = [
-        'billable_id' => 'integer',
-    ];
 
     public function getTable(): string
     {

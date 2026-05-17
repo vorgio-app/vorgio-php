@@ -23,6 +23,11 @@ use Illuminate\Support\Carbon;
  * @property string $status
  * @property int $total_cents
  * @property string $currency
+ * @property string|null $number
+ * @property Carbon|null $billing_date
+ * @property string|null $every
+ * @property Carbon|null $next_invoice_at
+ * @property array<string, mixed>|null $metadata
  * @property Carbon|null $sent_at
  * @property Carbon|null $paid_at
  * @property Carbon|null $cancelled_at
@@ -40,6 +45,9 @@ class Invoice extends Model
 
     protected $casts = [
         'total_cents' => 'integer',
+        'billing_date' => 'date',
+        'next_invoice_at' => 'datetime',
+        'metadata' => 'array',
         'sent_at' => 'datetime',
         'paid_at' => 'datetime',
         'cancelled_at' => 'datetime',

@@ -76,6 +76,11 @@ it('upserts an Invoice mirror row and dispatches VorgioInvoiceSent on invoice.se
             'client_id' => 'cli_1',
             'total_cents' => 9900,
             'currency' => 'EUR',
+            'number' => '2026-0001',
+            'billing_date' => '2026-05-16',
+            'every' => 'monthly',
+            'next_invoice_at' => '2026-06-16T00:00:00Z',
+            'metadata' => ['association_id' => '01923f4c-aaaa-bbbb-cccc-000000000001'],
             'sent_at' => '2026-05-16T09:30:00Z',
         ],
     ]);
@@ -88,7 +93,12 @@ it('upserts an Invoice mirror row and dispatches VorgioInvoiceSent on invoice.se
     expect($mirror)->not->toBeNull()
         ->and($mirror->vorgio_billable_id)->toBe($billable->id)
         ->and($mirror->status)->toBe(Invoice::STATUS_SENT)
-        ->and($mirror->total_cents)->toBe(9900);
+        ->and($mirror->total_cents)->toBe(9900)
+        ->and($mirror->number)->toBe('2026-0001')
+        ->and($mirror->billing_date?->toDateString())->toBe('2026-05-16')
+        ->and($mirror->every)->toBe('monthly')
+        ->and($mirror->next_invoice_at?->toDateString())->toBe('2026-06-16')
+        ->and($mirror->metadata)->toBe(['association_id' => '01923f4c-aaaa-bbbb-cccc-000000000001']);
 
     Event::assertDispatched(VorgioInvoiceSent::class);
 });

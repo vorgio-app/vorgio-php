@@ -22,7 +22,7 @@ use Illuminate\Support\Carbon;
  *
  * @property string $id
  * @property string $billable_type
- * @property int $billable_id
+ * @property string $billable_id
  * @property string $purpose
  * @property string $operation_id
  * @property string $status

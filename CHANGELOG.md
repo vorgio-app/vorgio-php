@@ -4,6 +4,45 @@ All notable changes to `vorgio-app/vorgio-php` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] — 2026-05-17
+
+Patch release. Fixes two Laravel-layer issues uncovered while wiring v0.2.0
+into MVGV. No caller-facing API has changed; consumers on bigint-keyed
+billables can upgrade transparently.
+
+### Fixed
+
+- **Polymorphic `billable_id` is now a string column.** Previously declared
+  as `unsignedBigInteger` on `vorgio_billables` and `vorgio_operations`,
+  which silently truncated UUIDs to `0` and broke every polymorphic
+  lookup for consumers that key their billable model with `HasUuids`
+  (e.g. MVGV's `Association`). The column now stores whatever key shape
+  the consumer model uses. `VorgioBillable::$casts['billable_id'] =>
+  'integer'` was dropped accordingly.
+
+### Added
+
+- **`vorgio_invoices` mirror persists more of the webhook payload.** Five
+  additional columns — `number`, `billing_date`, `every`,
+  `next_invoice_at`, `metadata` — populated by the webhook controller
+  from the inbound `invoice` object. Consumer UIs that previously needed
+  to round-trip to the API for the invoice number / billing date can
+  now read them from the mirror.
+
+### Tests
+
+- Cashier-style test fixture (`TestAssociation` + `test_associations`)
+  switched to UUID PKs so the full suite exercises the polymorphic-id
+  path the same way MVGV does in production. Pin against future
+  regressions of the v0.2.0 bigint trap.
+
+### Upgrade notes
+
+Drop the new dependency, run `php artisan migrate` — no further action
+needed. No data migration is required: any rows previously written by
+v0.2.0 against a UUID-keyed billable would have a `billable_id` of `0`
+(broken anyway), so the schema change loses nothing.
+
 ## [0.2.0] — 2026-05-16
 
 The headline change is the Cashier-style Laravel layer. The core SDK
@@ -103,5 +142,6 @@ SDK) or the new `Vorgio\Laravel\Billable` trait (Laravel apps).
 
 Initial public release.
 
+[0.2.1]: https://github.com/vorgio-app/vorgio-php/releases/tag/v0.2.1
 [0.2.0]: https://github.com/vorgio-app/vorgio-php/releases/tag/v0.2.0
 [0.1.0]: https://github.com/vorgio-app/vorgio-php/releases/tag/v0.1.0

@@ -27,6 +27,14 @@ return new class () extends Migration {
             $table->string('status')->default('draft');
             $table->unsignedBigInteger('total_cents')->default(0);
             $table->string('currency', 3)->default('EUR');
+            // Optional fields surfaced by the webhook payload that consumer
+            // UIs typically want to display alongside the mirror. Vorgio is
+            // still the source of truth — these are a denormalised cache.
+            $table->string('number')->nullable();
+            $table->date('billing_date')->nullable();
+            $table->string('every')->nullable();
+            $table->dateTime('next_invoice_at')->nullable();
+            $table->json('metadata')->nullable();
             $table->dateTime('sent_at')->nullable();
             $table->dateTime('paid_at')->nullable();
             $table->dateTime('cancelled_at')->nullable();

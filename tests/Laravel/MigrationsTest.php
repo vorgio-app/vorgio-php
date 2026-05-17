@@ -34,6 +34,8 @@ it('vorgio_subscriptions tracks every / next_invoice_at / status', function (): 
 it('vorgio_invoices mirrors invoice state and supports parent_invoice_id back-reference', function (): void {
     expect(Schema::hasColumns('vorgio_invoices', [
         'id', 'vorgio_billable_id', 'vorgio_invoice_id', 'parent_invoice_id',
-        'status', 'total_cents', 'currency', 'sent_at', 'paid_at', 'cancelled_at',
+        'status', 'total_cents', 'currency',
+        'number', 'billing_date', 'every', 'next_invoice_at', 'metadata',
+        'sent_at', 'paid_at', 'cancelled_at',
     ]))->toBeTrue();
 });

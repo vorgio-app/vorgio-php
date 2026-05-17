@@ -26,8 +26,13 @@ abstract class TestCase extends BaseTestCase
     {
         parent::setUp();
 
+        // UUID primary key mirrors MVGV's real Association model (HasUuids).
+        // The previous bigint id hid a v0.2.0 regression where the polymorphic
+        // billable_id column was unsignedBigInteger and silently truncated
+        // UUIDs to 0. Keep the fixture UUID-keyed so the bigint→string
+        // schema change stays under test.
         Schema::create('test_associations', function (Blueprint $table) {
-            $table->id();
+            $table->uuid('id')->primary();
             $table->string('name');
             $table->string('email');
             $table->timestamps();

@@ -192,6 +192,11 @@ final class WebhookController
                 'parent_invoice_id' => $parentInvoiceId,
                 'total_cents' => $totalCents,
                 'currency' => $currency,
+                'number' => $invoiceData['number'] ?? null,
+                'billing_date' => $invoiceData['billing_date'] ?? null,
+                'every' => $invoiceData['every'] ?? null,
+                'next_invoice_at' => $invoiceData['next_invoice_at'] ?? null,
+                'metadata' => $invoiceData['metadata'] ?? null,
             ], $attributes),
         );
     }
