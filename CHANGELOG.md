@@ -4,6 +4,23 @@ All notable changes to `vorgio-app/vorgio-php` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] — 2026-06-01
+
+Patch release. Fixes a metadata round-trip gap in the Laravel `Billable`
+trait, found while preparing the first production (yearly) subscription. No
+caller-facing API has changed; existing callers upgrade transparently.
+
+### Fixed
+
+- **`Billable::subscribe()` now forwards a `metadata` key nested in the
+  invoice payload.** `/v1/checkouts` reads `metadata` at the **top level**
+  and echoes it on every webhook payload. Callers that passed `metadata`
+  inside `$invoicePayload` (the natural spot, alongside `subject` /
+  `positions`) had it dropped by the server's request validation, so the
+  value never reached the invoice or its webhooks. `subscribe()` now lifts a
+  `metadata` key out of the invoice payload to the checkout top level.
+  Callers already passing top-level metadata are unaffected.
+
 ## [0.2.2] — 2026-05-17
 
 Follow-up patch release. v0.2.1's `vorgio_operations` composite index

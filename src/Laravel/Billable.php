@@ -171,7 +171,10 @@ trait Billable
      *
      * @param  string  $every  e.g. `'monthly'`, `'yearly'`.
      * @param  array<string, mixed>  $invoicePayload  The `invoice` shape
-     *   Vorgio expects (subject, tax_rate, positions, ...).
+     *   Vorgio expects (subject, tax_rate, positions, ...). A `metadata`
+     *   key here is lifted to the checkout's top level — that's where
+     *   `/v1/checkouts` reads it and where it gets echoed back on every
+     *   webhook payload; left nested it would be silently dropped.
      * @param  array<string, mixed>  $clientPayload  Optional. When omitted
      *   the trait derives client name + email from the model. Pass
      *   explicitly for full control.
@@ -186,11 +189,21 @@ trait Billable
             return $existing;
         }
 
+        // `metadata` belongs at the checkout top level (see param docs).
+        // Pull it out of the invoice block so callers can keep passing one
+        // flat payload without losing the round-trip.
+        $metadata = $invoicePayload['metadata'] ?? null;
+        unset($invoicePayload['metadata']);
+
         $payload = [
             'client' => $clientPayload === [] ? $this->defaultClientPayload() : $clientPayload,
             'every' => $every,
             'invoice' => $invoicePayload,
         ];
+
+        if ($metadata !== null) {
+            $payload['metadata'] = $metadata;
+        }
 
         return $this->runOperation(
             purpose: Operation::PURPOSE_SUBSCRIBE,

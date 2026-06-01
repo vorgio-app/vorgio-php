@@ -303,6 +303,7 @@ $subscription = $association->subscribe('monthly', [
     'subject'   => 'Mitgliedsbeitrag',
     'tax_rate'  => 19,
     'positions' => [['mode' => 'fixed', 'amount_cents' => 9900]],
+    'metadata'  => ['association_id' => 42], // lifted to the checkout top level; round-tripped on every webhook
 ]);
 
 // Change cadence in place.

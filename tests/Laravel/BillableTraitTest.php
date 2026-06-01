@@ -52,6 +52,38 @@ it('starts a subscription and persists the polymorphic mapping', function (): vo
     Event::assertDispatched(VorgioSubscriptionStarted::class);
 });
 
+it('lifts a nested invoice `metadata` key to the checkout top level', function (): void {
+    Event::fake([VorgioCustomerCreated::class, VorgioSubscriptionStarted::class]);
+
+    $history = vorgioBindMockClient([
+        jsonResponse(201, [
+            'data' => [
+                'client_id' => 'cli_1',
+                'invoice' => ['id' => 'inv_1', 'every' => 'yearly', 'next_invoice_at' => '2027-06-01'],
+            ],
+        ]),
+    ]);
+
+    $assoc = TestAssociation::create(['name' => 'Verein', 'email' => 'kasse@verein.test']);
+    $assoc->subscribe('yearly', [
+        'subject' => 'Jahresbeitrag',
+        'tax_rate' => 0,
+        'next_invoice_at' => '2027-06-01',
+        'positions' => [['mode' => 'fixed', 'amount_cents' => 11900]],
+        'metadata' => ['association_id' => 42, 'app' => 'mvgv'],
+    ]);
+
+    /** @var Request $req */
+    $req = $history[0]['request'];
+    $body = json_decode((string) $req->getBody(), true);
+
+    // `/v1/checkouts` only reads top-level `metadata`; left nested under
+    // `invoice` it would be silently dropped by the server's validation.
+    expect($body['every'])->toBe('yearly')
+        ->and($body['metadata'])->toBe(['association_id' => 42, 'app' => 'mvgv'])
+        ->and($body['invoice'])->not->toHaveKey('metadata');
+});
+
 it('is idempotent: calling subscribe twice returns the existing subscription without a second API call', function (): void {
     $history = vorgioBindMockClient([
         jsonResponse(201, [
