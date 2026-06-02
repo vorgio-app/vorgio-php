@@ -40,7 +40,7 @@ use Vorgio\Util\Uuid;
  */
 class VorgioClient
 {
-    public const VERSION = '0.4.0';
+    public const VERSION = '0.4.1';
 
     /**
      * Default request timeout in seconds. Overridable per call via the

@@ -46,6 +46,8 @@ try {
             'city' => 'Berlin',
             'country' => 'DE',
             'email' => 'kasse@demo-verein.test',
+            // Optional: when omitted, the API defaults the client's language
+            // to the authenticated team's default invoice locale.
             'language' => 'de',
             'rate' => 0,
             'vat' => 19,
