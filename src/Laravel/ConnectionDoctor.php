@@ -46,28 +46,28 @@ final class ConnectionDoctor
 
         $token = (string) $this->config->get('vorgio.token', '');
         if ($token === '') {
-            $checks[] = $this->check('token', 'API token', self::FAIL, 'VORGIO_TOKEN is not set.');
+            $checks[] = $this->check('token', $this->t('labels.token'), self::FAIL, $this->t('token.missing'));
 
             return $this->report(null, $checks);
         }
-        $checks[] = $this->check('token', 'API token', self::OK, 'VORGIO_TOKEN is set.');
+        $checks[] = $this->check('token', $this->t('labels.token'), self::OK, $this->t('token.set'));
 
         $connection = null;
 
         try {
             $connection = $this->container->make(VorgioClient::class)->connection()->retrieve();
-            $checks[] = $this->check('reachable', 'Reachable & authenticated', self::OK, 'Vorgio accepted the token.');
+            $checks[] = $this->check('reachable', $this->t('labels.reachable'), self::OK, $this->t('reachable.ok'));
         } catch (VorgioApiException $e) {
             $checks[] = $this->check(
                 'reachable',
-                'Reachable & authenticated',
+                $this->t('labels.reachable'),
                 self::FAIL,
-                'Vorgio rejected the request (HTTP '.$e->statusCode.'): '.$e->getMessage(),
+                $this->t('reachable.rejected', ['status' => $e->statusCode, 'message' => $e->getMessage()]),
             );
 
             return $this->report(null, $checks);
         } catch (Throwable $e) {
-            $checks[] = $this->check('reachable', 'Reachable & authenticated', self::FAIL, 'Could not reach Vorgio: '.$e->getMessage());
+            $checks[] = $this->check('reachable', $this->t('labels.reachable'), self::FAIL, $this->t('reachable.unreachable', ['message' => $e->getMessage()]));
 
             return $this->report(null, $checks);
         }
@@ -95,14 +95,14 @@ final class ConnectionDoctor
         $mode = (string) ($data['mode'] ?? '');
 
         if ($mode === 'live') {
-            return $this->check('mode', 'Mode', self::OK, 'Token is in LIVE mode.');
+            return $this->check('mode', $this->t('labels.mode'), self::OK, $this->t('mode.live'));
         }
 
         if ($mode === 'test') {
-            return $this->check('mode', 'Mode', self::WARN, 'Token is in TEST mode — test invoices are not emailed and do not bill. Use a LIVE token for production.');
+            return $this->check('mode', $this->t('labels.mode'), self::WARN, $this->t('mode.test'));
         }
 
-        return $this->check('mode', 'Mode', self::WARN, 'Unknown mode.');
+        return $this->check('mode', $this->t('labels.mode'), self::WARN, $this->t('mode.unknown'));
     }
 
     /**
@@ -119,10 +119,10 @@ final class ConnectionDoctor
         $missing = array_values(array_diff($required, $granted));
 
         if ($missing === []) {
-            return $this->check('abilities', 'Token abilities', self::OK, 'All required abilities are granted.');
+            return $this->check('abilities', $this->t('labels.abilities'), self::OK, $this->t('abilities.ok'));
         }
 
-        return $this->check('abilities', 'Token abilities', self::FAIL, 'Missing abilities: '.implode(', ', $missing).'. Re-issue the token with the matching preset.');
+        return $this->check('abilities', $this->t('labels.abilities'), self::FAIL, $this->t('abilities.missing', ['abilities' => implode(', ', $missing)]));
     }
 
     /**
@@ -132,7 +132,7 @@ final class ConnectionDoctor
     private function webhookCheck(array $data): array
     {
         if ((string) $this->config->get('vorgio.webhook.secret', '') === '') {
-            return $this->check('webhook', 'Webhook', self::FAIL, 'VORGIO_WEBHOOK_SECRET is not set — this app cannot receive webhooks.');
+            return $this->check('webhook', $this->t('labels.webhook'), self::FAIL, $this->t('webhook.no_secret'));
         }
 
         $expected = $this->expectedWebhookUrl();
@@ -148,11 +148,11 @@ final class ConnectionDoctor
         }
 
         if ($match === null) {
-            return $this->check('webhook', 'Webhook', self::FAIL, 'No webhook registered for '.$expected.'. Add one in your Vorgio team settings.');
+            return $this->check('webhook', $this->t('labels.webhook'), self::FAIL, $this->t('webhook.not_registered', ['url' => $expected]));
         }
 
         if (($match['active'] ?? false) !== true) {
-            return $this->check('webhook', 'Webhook', self::FAIL, 'The webhook for '.$expected.' is inactive (likely auto-disabled after repeated delivery failures). Re-enable it.');
+            return $this->check('webhook', $this->t('labels.webhook'), self::FAIL, $this->t('webhook.inactive', ['url' => $expected]));
         }
 
         /** @var array<int, string> $requiredEvents */
@@ -160,10 +160,10 @@ final class ConnectionDoctor
         $missingEvents = array_values(array_diff($requiredEvents, (array) ($match['events'] ?? [])));
 
         if ($missingEvents !== []) {
-            return $this->check('webhook', 'Webhook', self::WARN, 'Webhook is registered but not subscribed to: '.implode(', ', $missingEvents).'.');
+            return $this->check('webhook', $this->t('labels.webhook'), self::WARN, $this->t('webhook.missing_events', ['events' => implode(', ', $missingEvents)]));
         }
 
-        return $this->check('webhook', 'Webhook', self::OK, 'Active webhook registered for '.$expected.' with the required events.');
+        return $this->check('webhook', $this->t('labels.webhook'), self::OK, $this->t('webhook.ok', ['url' => $expected]));
     }
 
     /**
@@ -182,10 +182,10 @@ final class ConnectionDoctor
         }
 
         if ($missing === []) {
-            return $this->check('migrations', 'Mirror tables', self::OK, 'All Vorgio mirror tables exist.');
+            return $this->check('migrations', $this->t('labels.migrations'), self::OK, $this->t('migrations.ok'));
         }
 
-        return $this->check('migrations', 'Mirror tables', self::FAIL, 'Missing tables: '.implode(', ', $missing).'. Run `php artisan migrate`.');
+        return $this->check('migrations', $this->t('labels.migrations'), self::FAIL, $this->t('migrations.missing', ['tables' => implode(', ', $missing)]));
     }
 
     /**
@@ -196,27 +196,34 @@ final class ConnectionDoctor
         try {
             $response = $this->container->make(VorgioClient::class)->connection()->sendTestWebhook();
         } catch (Throwable $e) {
-            return $this->check('webhook_delivery', 'Webhook delivery', self::FAIL, 'Test webhook request failed: '.$e->getMessage());
+            return $this->check('webhook_delivery', $this->t('labels.webhook_delivery'), self::FAIL, $this->t('webhook_delivery.request_failed', ['message' => $e->getMessage()]));
         }
 
         /** @var array<int, array<string, mixed>> $results */
         $results = (array) ($response['data']['results'] ?? []);
 
         if ($results === []) {
-            return $this->check('webhook_delivery', 'Webhook delivery', self::FAIL, 'No active webhook received the test event.');
+            return $this->check('webhook_delivery', $this->t('labels.webhook_delivery'), self::FAIL, $this->t('webhook_delivery.none_received'));
         }
 
         foreach ($results as $result) {
             if (($result['ok'] ?? false) !== true) {
-                $detail = 'Endpoint '.($result['url'] ?? '?').' did not accept the test event';
+                $url = (string) ($result['url'] ?? '?');
                 $status = $result['status'] ?? null;
-                $detail .= $status !== null ? ' (HTTP '.$status.').' : (isset($result['error']) ? ': '.$result['error'] : '.');
 
-                return $this->check('webhook_delivery', 'Webhook delivery', self::FAIL, $detail.' Check the URL and that VORGIO_WEBHOOK_SECRET matches.');
+                if ($status !== null) {
+                    $detail = $this->t('webhook_delivery.rejected_status', ['url' => $url, 'status' => $status]);
+                } elseif (isset($result['error'])) {
+                    $detail = $this->t('webhook_delivery.rejected_error', ['url' => $url, 'error' => $result['error']]);
+                } else {
+                    $detail = $this->t('webhook_delivery.rejected_unknown', ['url' => $url]);
+                }
+
+                return $this->check('webhook_delivery', $this->t('labels.webhook_delivery'), self::FAIL, $detail);
             }
         }
 
-        return $this->check('webhook_delivery', 'Webhook delivery', self::OK, 'Your endpoint received and verified a signed test event.');
+        return $this->check('webhook_delivery', $this->t('labels.webhook_delivery'), self::OK, $this->t('webhook_delivery.ok'));
     }
 
     private function expectedWebhookUrl(): string
@@ -249,5 +256,17 @@ final class ConnectionDoctor
     private function check(string $key, string $label, string $status, string $detail): array
     {
         return ['key' => $key, 'label' => $label, 'status' => $status, 'detail' => $detail];
+    }
+
+    /**
+     * Resolve a check label/detail in the app's current locale. Strings live
+     * under the publishable `vorgio::doctor.*` namespace so consuming apps can
+     * override them or add further languages without touching this package.
+     *
+     * @param  array<string, mixed>  $replace
+     */
+    private function t(string $key, array $replace = []): string
+    {
+        return (string) trans('vorgio::doctor.'.$key, $replace);
     }
 }

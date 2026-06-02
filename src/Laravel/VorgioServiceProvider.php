@@ -53,6 +53,7 @@ class VorgioServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->loadMigrationsFrom(__DIR__.'/database/migrations');
+        $this->loadTranslationsFrom(__DIR__.'/lang', 'vorgio');
 
         $this->registerWebhookRoute();
 
@@ -66,6 +67,10 @@ class VorgioServiceProvider extends ServiceProvider
             $this->publishes([
                 __DIR__.'/database/migrations' => $this->app->databasePath('migrations'),
             ], 'vorgio-migrations');
+
+            $this->publishes([
+                __DIR__.'/lang' => $this->app->langPath('vendor/vorgio'),
+            ], 'vorgio-lang');
         }
     }
 

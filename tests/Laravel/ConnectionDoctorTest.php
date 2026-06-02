@@ -155,3 +155,34 @@ it('exits non-zero from vorgio:doctor when a check fails', function (): void {
 
     expect(Artisan::call('vorgio:doctor'))->toBe(1);
 });
+
+it('registers the publishable vorgio:: translation namespace', function (): void {
+    // An unregistered namespace would echo the key back verbatim; a real
+    // translated value proves loadTranslationsFrom('vorgio') took effect.
+    expect(trans('vorgio::doctor.labels.token'))->toBe('API token');
+});
+
+it('localizes check labels and details to the app locale', function (): void {
+    app()->setLocale('de');
+
+    $payload = connectionPayload();
+    $payload['data']['token']['abilities'] = ['invoices:read'];
+
+    vorgioBindMockClient([jsonResponse(200, $payload)]);
+
+    $checks = checksByKey(app(ConnectionDoctor::class)->run());
+
+    expect($checks['token']['label'])->toBe('API-Token')
+        ->and($checks['mode']['detail'])->toBe('Token ist im LIVE-Modus.')
+        // Interpolated placeholder values stay verbatim inside the translated string.
+        ->and($checks['abilities']['detail'])->toContain('Fehlende Berechtigungen:')
+        ->and($checks['abilities']['detail'])->toContain('checkouts:write');
+});
+
+it('falls back per-key to other locales (fr/es resolve)', function (): void {
+    app()->setLocale('fr');
+    expect(trans('vorgio::doctor.labels.mode'))->toBe('Mode');
+
+    app()->setLocale('es');
+    expect(trans('vorgio::doctor.labels.mode'))->toBe('Modo');
+});

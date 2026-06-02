@@ -4,6 +4,31 @@ All notable changes to `vorgio-app/vorgio-php` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] — 2026-06-02
+
+Minor release. Makes the **connection doctor** fully localizable. Every check
+`label` and `detail` now resolves through Laravel's translation system under
+the `vorgio::doctor.*` namespace instead of hardcoded English, so a consuming
+app renders the connection panel in its own locale. Backwards compatible — the
+report shape is unchanged and `label`/`detail` are still ready-to-render
+strings, just localized to `app()->getLocale()`.
+
+### Added
+
+- **Translations for the connection doctor** shipped for English, German,
+  French, and Spanish under `src/Laravel/lang/{en,de,fr,es}/doctor.php`.
+- **Publishable translations** via `php artisan vendor:publish --tag=vorgio-lang`
+  (lands in `lang/vendor/vorgio/`). Apps can override any string or drop in a
+  new `lang/vendor/vorgio/<locale>/doctor.php` to add a language — Laravel's
+  loader resolves it automatically.
+
+### Changed
+
+- `Vorgio\Laravel\ConnectionDoctor` no longer hardcodes English check text; it
+  looks strings up via the `vorgio::doctor.*` namespace. The
+  `VorgioServiceProvider` now calls `loadTranslationsFrom(__DIR__.'/lang',
+  'vorgio')`. The `vorgio:doctor` command's own framing lines remain English.
+
 ## [0.3.0] — 2026-06-02
 
 Minor release. Adds a **connection doctor** so an integration can verify it is
