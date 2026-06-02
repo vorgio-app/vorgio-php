@@ -16,6 +16,7 @@ use Vorgio\Exception\VorgioRateLimitedException;
 use Vorgio\Exception\VorgioValidationException;
 use Vorgio\Resource\Checkouts;
 use Vorgio\Resource\Clients;
+use Vorgio\Resource\Connection;
 use Vorgio\Resource\Invoices;
 use Vorgio\Resource\Subscriptions;
 use Vorgio\Support\RetryPolicy;
@@ -39,7 +40,7 @@ use Vorgio\Util\Uuid;
  */
 class VorgioClient
 {
-    public const VERSION = '0.2.0';
+    public const VERSION = '0.3.0';
 
     /**
      * Default request timeout in seconds. Overridable per call via the
@@ -90,6 +91,11 @@ class VorgioClient
     public function subscriptions(): Subscriptions
     {
         return new Subscriptions($this);
+    }
+
+    public function connection(): Connection
+    {
+        return new Connection($this);
     }
 
     /**

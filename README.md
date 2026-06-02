@@ -84,6 +84,8 @@ See [`examples/checkout.php`](examples/checkout.php) for a runnable script.
 | `GET  /v1/clients/{id}`                | `$vorgio->clients()->retrieve($id)`         |
 | `PATCH /v1/clients/{id}`               | `$vorgio->clients()->update($id, $body)`    |
 | `DELETE /v1/clients/{id}`              | `$vorgio->clients()->delete($id)`           |
+| `GET  /v1/connection`                  | `$vorgio->connection()->retrieve()`         |
+| `POST /v1/connection/test-webhook`     | `$vorgio->connection()->sendTestWebhook()`  |
 
 Every method returns the decoded JSON response as a PHP `array`. The full
 contract for each request/response shape lives at
@@ -266,6 +268,38 @@ Vorgio::checkouts()->create([...]);
 ```
 
 …or inject `Vorgio\VorgioClient` via the container.
+
+### Checking the connection
+
+Once the env vars are set, confirm the app is correctly wired up to Vorgio:
+
+```bash
+php artisan vorgio:doctor                 # token, mode, abilities, webhook, mirror tables
+php artisan vorgio:doctor --test-webhook  # also fires a signed test event at your endpoint
+```
+
+Each line is a pass (`✓`), warning (`!`) or failure (`✗`); the command exits
+non-zero if any check fails, so you can gate a deploy on it. Under the hood it
+uses `Vorgio\Laravel\ConnectionDoctor`, which you can call directly to render
+the same report in your own UI (e.g. an operator settings page):
+
+```php
+use Vorgio\Laravel\ConnectionDoctor;
+
+$report = app(ConnectionDoctor::class)->run();          // cheap: introspection only
+// $report = app(ConnectionDoctor::class)->run(includeWebhookTest: true); // + live round-trip
+
+foreach ($report['checks'] as $check) {
+    // $check = ['key' => 'webhook', 'label' => 'Webhook', 'status' => 'ok|warn|fail', 'detail' => '…']
+}
+
+if (! $report['ok']) {
+    // surface the failing checks
+}
+```
+
+Tune what "correctly set up" means via `config/vorgio.php`
+(`required_abilities`, `required_webhook_events`).
 
 ### Cashier-style recurring billing
 

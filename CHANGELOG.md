@@ -4,6 +4,32 @@ All notable changes to `vorgio-app/vorgio-php` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] — 2026-06-02
+
+Minor release. Adds a **connection doctor** so an integration can verify it is
+wired up correctly without guessing — which team + mode a token is bound to,
+whether it carries the required abilities, and whether a webhook is actually
+registered and reachable. Requires vorgio.app to expose the `GET
+/api/v1/connection` and `POST /api/v1/connection/test-webhook` endpoints
+(shipped alongside this release). Backwards compatible — existing callers are
+unaffected.
+
+### Added
+
+- **`$vorgio->connection()` resource** with `retrieve()` (introspect the
+  current team, mode, token abilities, billing readiness, and registered
+  webhooks) and `sendTestWebhook()` (ask Vorgio to deliver a signed
+  `connection.test` event to your endpoint, proving the shared secret + URL).
+- **`Vorgio\Laravel\ConnectionDoctor`** — a service that runs the checks and
+  returns a structured `{ok, connection, checks[]}` report, suitable for both
+  CLI output and rendering in an operator GUI. The side-effecting webhook
+  round-trip is opt-in via `run(includeWebhookTest: true)`.
+- **`php artisan vorgio:doctor`** — prints the checklist; `--test-webhook`
+  also fires the live test event. Exit code is non-zero when any check fails,
+  so it doubles as a deploy/healthcheck gate.
+- **Config:** `vorgio.required_abilities` and `vorgio.required_webhook_events`
+  let you tune what the doctor considers "correctly set up".
+
 ## [0.2.3] — 2026-06-01
 
 Patch release. Fixes a metadata round-trip gap in the Laravel `Billable`

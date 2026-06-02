@@ -9,6 +9,7 @@ use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Vorgio\Exception\VorgioException;
+use Vorgio\Laravel\Console\DoctorCommand;
 use Vorgio\Laravel\Http\WebhookController;
 use Vorgio\Support\RetryPolicy;
 use Vorgio\VorgioClient;
@@ -56,6 +57,8 @@ class VorgioServiceProvider extends ServiceProvider
         $this->registerWebhookRoute();
 
         if ($this->app->runningInConsole()) {
+            $this->commands([DoctorCommand::class]);
+
             $this->publishes([
                 __DIR__.'/config/vorgio.php' => $this->app->configPath('vorgio.php'),
             ], 'vorgio-config');

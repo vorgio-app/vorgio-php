@@ -76,6 +76,33 @@ return [
 
     /*
     |---------------------------------------------------------------------------
+    | Connection doctor expectations
+    |---------------------------------------------------------------------------
+    |
+    | Used by `php artisan vorgio:doctor` and `ConnectionDoctor` to decide
+    | whether this app is wired up correctly. `required_abilities` is the set
+    | of token abilities your integration needs (the default matches the
+    | `recurring-billing` preset). `required_webhook_events` are the events
+    | your registered webhook must subscribe to. Trim either list if your
+    | integration uses fewer features.
+    |
+    */
+    'required_abilities' => [
+        'clients:write',
+        'invoices:write',
+        'invoices:send',
+        'invoices:read',
+        'checkouts:write',
+        'webhooks:manage',
+    ],
+
+    'required_webhook_events' => [
+        'invoice.sent',
+        'invoice.paid',
+    ],
+
+    /*
+    |---------------------------------------------------------------------------
     | Billable model
     |---------------------------------------------------------------------------
     |
