@@ -4,6 +4,18 @@ All notable changes to `vorgio-app/vorgio-php` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] — 2026-10-30
+
+### Fixed
+
+- A redelivered `invoice.paid` webhook no longer overwrites the mirror's
+  `paid_at`: the first value is kept, also when the payload has none (it used
+  to fall back to the current time).
+- `invoice.paid` no longer flips a cancelled mirror back to `paid`: the status
+  and `cancelled_at` stay, and `paid_at` is only filled if it was empty.
+  `VorgioInvoicePaid` still dispatches in both cases, so consumers decide what
+  a repeated or late payment means.
+
 ## [0.4.1] — 2026-06-02
 
 ### Documentation

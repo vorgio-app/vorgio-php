@@ -83,13 +83,23 @@ final class WebhookController
     }
 
     /**
+     * A redelivery keeps the first `paid_at` and leaves a cancelled mirror
+     * cancelled. The event still dispatches every time, so consumers decide
+     * what a repeated or late payment means.
+     *
      * @param  array<string, mixed>  $invoiceData
      */
     private function onInvoicePaid(WebhookEvent $event, array $invoiceData): void
     {
+        $existing = Invoice::query()
+            ->where('vorgio_invoice_id', (string) ($invoiceData['id'] ?? ''))
+            ->first();
+
         $local = $this->upsertInvoiceMirror($invoiceData, [
-            'status' => Invoice::STATUS_PAID,
-            'paid_at' => $invoiceData['paid_at'] ?? now(),
+            'status' => $existing?->status === Invoice::STATUS_CANCELLED
+                ? Invoice::STATUS_CANCELLED
+                : Invoice::STATUS_PAID,
+            'paid_at' => $existing->paid_at ?? $invoiceData['paid_at'] ?? now(),
         ]);
 
         if ($local !== null) {

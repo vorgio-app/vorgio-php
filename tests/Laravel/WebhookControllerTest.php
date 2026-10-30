@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Testing\TestResponse;
 use Vorgio\Laravel\Events\VorgioBillingCycleChanged;
@@ -124,7 +125,118 @@ it('marks the mirror row paid and dispatches VorgioInvoicePaid on invoice.paid',
 
     $mirror = Invoice::query()->where('vorgio_invoice_id', 'inv_1')->first();
     expect($mirror->status)->toBe(Invoice::STATUS_PAID)
-        ->and($mirror->paid_at)->not->toBeNull();
+        ->and($mirror->paid_at?->toIso8601ZuluString())->toBe('2026-05-17T08:00:00Z');
+
+    Event::assertDispatched(VorgioInvoicePaid::class);
+});
+
+it('marks a sent mirror paid on its first invoice.paid and falls back to now without paid_at', function (): void {
+    Event::fake([VorgioInvoicePaid::class]);
+
+    $assoc = TestAssociation::create(['name' => 'X', 'email' => 'x@y.z']);
+    $assoc->vorgioBillable()->create(['vorgio_client_id' => 'cli_1']);
+
+    [$sentPayload, $sentSig] = signedPayload('invoice.sent', [
+        'invoice' => ['id' => 'inv_1', 'client_id' => 'cli_1', 'total_cents' => 9900],
+    ]);
+    postRawWebhook($sentPayload, $sentSig);
+
+    Carbon::setTestNow('2026-06-01T12:00:00Z');
+
+    [$payload, $sig] = signedPayload('invoice.paid', [
+        'invoice' => ['id' => 'inv_1', 'client_id' => 'cli_1', 'total_cents' => 9900],
+    ]);
+    postRawWebhook($payload, $sig);
+
+    Carbon::setTestNow();
+
+    $mirror = Invoice::query()->where('vorgio_invoice_id', 'inv_1')->first();
+    expect($mirror->status)->toBe(Invoice::STATUS_PAID)
+        ->and($mirror->paid_at?->toIso8601ZuluString())->toBe('2026-06-01T12:00:00Z');
+
+    Event::assertDispatched(VorgioInvoicePaid::class);
+});
+
+it('keeps the first paid_at when invoice.paid is replayed', function (array $replayedFields): void {
+    Event::fake([VorgioInvoicePaid::class]);
+
+    $assoc = TestAssociation::create(['name' => 'X', 'email' => 'x@y.z']);
+    $assoc->vorgioBillable()->create(['vorgio_client_id' => 'cli_1']);
+
+    $invoice = ['id' => 'inv_1', 'client_id' => 'cli_1', 'total_cents' => 9900];
+
+    [$payload, $sig] = signedPayload('invoice.paid', [
+        'invoice' => [...$invoice, 'paid_at' => '2026-05-17T08:00:00Z'],
+    ]);
+    postRawWebhook($payload, $sig);
+
+    [$replayPayload, $replaySig] = signedPayload('invoice.paid', [
+        'invoice' => [...$invoice, ...$replayedFields],
+    ]);
+    postRawWebhook($replayPayload, $replaySig);
+
+    $mirror = Invoice::query()->where('vorgio_invoice_id', 'inv_1')->first();
+    expect($mirror->status)->toBe(Invoice::STATUS_PAID)
+        ->and($mirror->paid_at?->toIso8601ZuluString())->toBe('2026-05-17T08:00:00Z');
+
+    Event::assertDispatchedTimes(VorgioInvoicePaid::class, 2);
+})->with([
+    'with a later paid_at' => [['paid_at' => '2026-06-20T08:00:00Z']],
+    'without paid_at' => [[]],
+]);
+
+it('keeps a cancelled mirror cancelled on invoice.paid and still dispatches', function (): void {
+    Event::fake([VorgioInvoicePaid::class]);
+
+    $assoc = TestAssociation::create(['name' => 'X', 'email' => 'x@y.z']);
+    $assoc->vorgioBillable()->create(['vorgio_client_id' => 'cli_1']);
+
+    $invoice = ['id' => 'inv_1', 'client_id' => 'cli_1', 'total_cents' => 9900];
+
+    [$payload, $sig] = signedPayload('invoice.paid', [
+        'invoice' => [...$invoice, 'paid_at' => '2026-05-17T08:00:00Z'],
+    ]);
+    postRawWebhook($payload, $sig);
+
+    [$cancelPayload, $cancelSig] = signedPayload('invoice.cancelled', [
+        'invoice' => [...$invoice, 'cancelled_at' => '2026-05-18T09:00:00Z'],
+    ]);
+    postRawWebhook($cancelPayload, $cancelSig);
+
+    [$replayPayload, $replaySig] = signedPayload('invoice.paid', [
+        'invoice' => [...$invoice, 'paid_at' => '2026-06-20T08:00:00Z'],
+    ]);
+    postRawWebhook($replayPayload, $replaySig);
+
+    $mirror = Invoice::query()->where('vorgio_invoice_id', 'inv_1')->first();
+    expect($mirror->status)->toBe(Invoice::STATUS_CANCELLED)
+        ->and($mirror->cancelled_at?->toIso8601ZuluString())->toBe('2026-05-18T09:00:00Z')
+        ->and($mirror->paid_at?->toIso8601ZuluString())->toBe('2026-05-17T08:00:00Z');
+
+    Event::assertDispatchedTimes(VorgioInvoicePaid::class, 2);
+});
+
+it('records paid_at on a cancelled mirror that was never paid, without reopening it', function (): void {
+    Event::fake([VorgioInvoicePaid::class]);
+
+    $assoc = TestAssociation::create(['name' => 'X', 'email' => 'x@y.z']);
+    $assoc->vorgioBillable()->create(['vorgio_client_id' => 'cli_1']);
+
+    $invoice = ['id' => 'inv_1', 'client_id' => 'cli_1', 'total_cents' => 9900];
+
+    [$cancelPayload, $cancelSig] = signedPayload('invoice.cancelled', [
+        'invoice' => [...$invoice, 'cancelled_at' => '2026-05-18T09:00:00Z'],
+    ]);
+    postRawWebhook($cancelPayload, $cancelSig);
+
+    [$payload, $sig] = signedPayload('invoice.paid', [
+        'invoice' => [...$invoice, 'paid_at' => '2026-05-17T08:00:00Z'],
+    ]);
+    postRawWebhook($payload, $sig);
+
+    $mirror = Invoice::query()->where('vorgio_invoice_id', 'inv_1')->first();
+    expect($mirror->status)->toBe(Invoice::STATUS_CANCELLED)
+        ->and($mirror->paid_at?->toIso8601ZuluString())->toBe('2026-05-17T08:00:00Z');
 
     Event::assertDispatched(VorgioInvoicePaid::class);
 });
